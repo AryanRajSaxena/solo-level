@@ -1,6 +1,6 @@
-# [Project name]
+# Solo Leveling Quest
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A dark anime-inspired daily quest RPG that turns workouts, coding, and personal routines into progression, hunter ranks, streaks, and weekly boss raids.
 
 ## Run & Operate
 
@@ -10,6 +10,7 @@ _Replace the heading above with the project's name, and this line with one sente
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL` — Postgres connection string
+- `uv run uvicorn backend.solo_leveling_api.main:app --host 0.0.0.0 --port 8000 --reload` — run the separate Python API
 
 ## Stack
 
@@ -22,15 +23,22 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/solo-leveling-quest/` — Expo mobile client
+- `artifacts/solo-leveling-quest/context/QuestContext.tsx` — offline-first quest, progression, reminders, and penalty state
+- `backend/solo_leveling_api/main.py` — FastAPI persistence/progression contract
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The mobile client is offline-first so quest completion remains usable without a network connection.
+- Clerk owns accounts and sessions; the Python service accepts Clerk bearer tokens at its protected boundary.
+- Native social-app blocking is intentionally not claimed in the first build. The penalty is an in-app 24-hour lockdown with streak reset and XP loss.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Daily preset and custom quests with per-quest weekday scheduling
+- Hunter rank, level, XP, STR/INT/STAMINA/DISCIPLINE stats, streaks, titles, and weekly boss raid rewards
+- Morning and evening notification scheduling
+- Rest day planning and an in-app lockdown penalty that explains the manual/native-blocking roadmap
 
 ## User preferences
 

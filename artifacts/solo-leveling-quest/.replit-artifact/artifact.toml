@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/solo-leveling-quest/"
+title = "Solo Leveling Quest"
+description = "A dark, anime-inspired daily quest RPG for building discipline through workouts, coding, habits, scheduled reminders, rest days, and weekly boss raids."
+version = "1.0.0"
+id = "artifacts/solo-leveling-quest"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/solo-leveling-quest/" ]
+localPort = 25753
+
+[services.development]
+run = "pnpm --filter @workspace/solo-leveling-quest run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/solo-leveling-quest", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/solo-leveling-quest", "run", "serve" ]
+
+[services.env]
+PORT = "25753"
+BASE_PATH = "/solo-leveling-quest/"
