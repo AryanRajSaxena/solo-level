@@ -42,7 +42,7 @@ export default function SettingsScreen() {
 
       <View style={styles.section}>
         <SectionHeader eyebrow="RECOVERY PLAN" title="Rest days" />
-        <Text style={[styles.helper, { color: colors.mutedForeground }]}>Rest days pause all quests. The weekly raid respects your recovery plan.</Text>
+        <Text style={[styles.helper, { color: colors.mutedForeground }]}>Rest days remove that weekday from both streak requirements and the weekly raid. They do not add a streak day or break an existing streak.</Text>
         <View style={styles.dayGrid}>
           {DAY_LABELS.map((label, index) => {
             const selected = restDays.includes(index as Weekday);
@@ -59,7 +59,7 @@ export default function SettingsScreen() {
         <SectionHeader eyebrow="PENALTY PROTOCOL" title="Social lockdown" />
         <View style={[styles.penaltyCard, { borderColor: colors.destructive, backgroundColor: '#291827' }]}>
           <Feather name="shield" color={colors.destructive} size={19} />
-          <View style={styles.copy}><Text style={[styles.settingTitle, { color: colors.foreground }]}>Failing a daily quest</Text><Text style={[styles.settingDetail, { color: colors.mutedForeground }]}>Activates an in-app 24-hour lockdown screen, resets your streak, and removes 100 XP. Native social app blocking is planned for a later build.</Text></View>
+          <View style={styles.copy}><Text style={[styles.settingTitle, { color: colors.foreground }]}>Zero-mercy failure protocol</Text><Text style={[styles.settingDetail, { color: colors.mutedForeground }]}>There is no illness or travel grace. A failed required day triggers one 24-hour in-app lockdown, resets your streak, and removes 100 XP. Native social app blocking is planned for a later build.</Text></View>
         </View>
         <Pressable onPress={simulatePenalty} style={[styles.demoButton, { borderColor: colors.destructive }]}>
           <Feather name="alert-triangle" size={16} color={colors.destructive} />

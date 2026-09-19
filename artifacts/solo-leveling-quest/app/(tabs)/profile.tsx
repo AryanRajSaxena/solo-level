@@ -34,6 +34,7 @@ export default function ProfileScreen() {
       </View>
       <View style={styles.section}>
         <SectionHeader eyebrow="ATTRIBUTES" title="Core stats" />
+        <Text style={[styles.helper, { color: colors.mutedForeground }]}>Each quest awards +1 to its primary stat only. Push-ups build STR; sit-ups and gym build STAMINA; coding builds INT; discipline quests build DISCIPLINE.</Text>
         {statMeta.map((stat) => {
           const value = profile.stats[stat.key];
           const width = Math.min(100, value * 2);
@@ -44,6 +45,11 @@ export default function ProfileScreen() {
             </View>
           );
         })}
+      </View>
+      <View style={[styles.rulesCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.rulesEyebrow, { color: colors.primary }]}>PROGRESSION RULES</Text>
+        <Text style={[styles.rulesTitle, { color: colors.foreground }]}>The curve gets harder by design.</Text>
+        <Text style={[styles.rulesCopy, { color: colors.mutedForeground }]}>Level 1 requires 1,000 XP. Every level adds 100 XP to the next requirement. Rank thresholds: D8 · C15 · B25 · A35 · S50.</Text>
       </View>
       <View style={[styles.titleCard, { backgroundColor: colors.accent, borderColor: colors.border }]}>
         <Feather name="award" size={20} color="#ffb25c" />
@@ -67,6 +73,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 8, fontWeight: '800', letterSpacing: 1.2, marginTop: 3 },
   divider: { width: 1, height: 32 },
   section: { marginTop: 28 },
+  helper: { fontSize: 12, lineHeight: 18, marginTop: -5, marginBottom: 16 },
   statRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
   statIcon: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginRight: 11 },
   statCopy: { flex: 1 },
@@ -75,6 +82,10 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 13, fontWeight: '800' },
   track: { height: 6, borderRadius: 6, overflow: 'hidden' },
   fill: { height: '100%', borderRadius: 6 },
+  rulesCard: { borderWidth: 1, borderRadius: 17, padding: 14, marginTop: 14 },
+  rulesEyebrow: { fontSize: 9, fontWeight: '800', letterSpacing: 1.4 },
+  rulesTitle: { fontSize: 15, fontWeight: '800', marginTop: 6 },
+  rulesCopy: { fontSize: 11, lineHeight: 17, marginTop: 5 },
   titleCard: { flexDirection: 'row', alignItems: 'center', gap: 11, borderWidth: 1, borderRadius: 17, padding: 14, marginTop: 14 },
   titleCardLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
   titleCardValue: { fontSize: 14, fontWeight: '800', marginTop: 5 },

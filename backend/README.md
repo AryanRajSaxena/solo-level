@@ -9,3 +9,12 @@ uv run uvicorn backend.solo_leveling_api.main:app --host 0.0.0.0 --port 8000 --r
 ```
 
 The API expects a Clerk bearer token on protected routes. Clerk validation belongs at the edge adapter; the app routes only receive an authenticated subject.
+
+## Progression and raid rules
+
+- XP to the next level is `1,000 + ((current level - 1) × 100)`.
+- Rank thresholds are D8, C15, B25, A35, and S50.
+- A quest awards XP and one point to its primary stat only.
+- Rest days are excluded from streak and raid requirements.
+- The weekly raid snapshots every quest scheduled during that week and requires two completions for each. A background evaluator runs once per minute, closes an ended week once, stores `PASSED` or `FAILED`, and rolls the next raid. Claiming a passed raid is idempotent.
+- Lockdown is intentionally zero-mercy for illness or travel: the standard 24-hour penalty is applied without a grace token.

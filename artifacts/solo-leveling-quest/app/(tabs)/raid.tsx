@@ -7,8 +7,9 @@ import { useQuestContext } from '@/context/QuestContext';
 
 export default function RaidScreen() {
   const colors = useColors();
-  const { raid, activeQuests, completedCount, completeRaid } = useQuestContext();
-  const progress = activeQuests.length ? Math.round((completedCount / activeQuests.length) * 100) : 100;
+  const { raid, lastRaid, raidProgress, raidPercent, completeRaid } = useQuestContext();
+  const canClaim = lastRaid?.status === 'PASSED';
+  const lastRaidWasClaimed = lastRaid?.status === 'CLAIMED';
   return (
     <Screen>
       <SectionHeader eyebrow="WEEKLY BOSS DUNGEON" title="The Architect’s Trial" />
@@ -16,7 +17,7 @@ export default function RaidScreen() {
         <View style={styles.bossIcon}><Feather name="zap" size={32} color="#07111c" /></View>
         <Text style={[styles.bossLabel, { color: colors.primary }]}>BOSS RAID // 01</Text>
         <Text style={[styles.bossTitle, { color: colors.foreground }]}>{raid.name}</Text>
-        <Text style={[styles.bossDetail, { color: colors.mutedForeground }]}>{raid.detail}. Both your consistency and your recovery plan are tested.</Text>
+        <Text style={[styles.bossDetail, { color: colors.mutedForeground }]}>{raid.detail}. Rest days are excluded from the requirement, and the result is evaluated once after the week closes.</Text>
         <View style={styles.rewardRow}>
           <View style={styles.reward}>
             <Feather name="award" size={17} color="#ffb25c" />
@@ -32,23 +33,25 @@ export default function RaidScreen() {
       <View style={styles.section}>
         <View style={styles.progressHeader}>
           <Text style={[styles.progressTitle, { color: colors.foreground }]}>This week’s charge</Text>
-          <Text style={[styles.progressValue, { color: colors.primary }]}>{progress}%</Text>
+          <Text style={[styles.progressValue, { color: colors.primary }]}>{raidPercent}%</Text>
         </View>
-        <View style={[styles.track, { backgroundColor: colors.muted }]}><View style={[styles.fill, { backgroundColor: colors.primary, width: `${progress}%` }]} /></View>
-        <Text style={[styles.progressDetail, { color: colors.mutedForeground }]}>{completedCount} of {activeQuests.length} objectives cleared today. Complete the combined challenge to claim your reward.</Text>
+        <View style={[styles.track, { backgroundColor: colors.muted }]}><View style={[styles.fill, { backgroundColor: colors.primary, width: `${raidPercent}%` }]} /></View>
+        <Text style={[styles.progressDetail, { color: colors.mutedForeground }]}>{raidProgress} of {raid.target} required completions logged. Each quest must be cleared twice during the week.</Text>
       </View>
 
       <View style={[styles.ruleCard, { backgroundColor: colors.accent, borderColor: colors.border }]}>
         <Feather name="info" size={18} color={colors.primary} />
         <View style={{ flex: 1 }}>
           <Text style={[styles.ruleTitle, { color: colors.foreground }]}>How to beat the raid</Text>
-          <Text style={[styles.ruleCopy, { color: colors.mutedForeground }]}>Clear every active daily quest and keep your routine alive across the week. Rest days are respected, but skipping active quests lowers your raid progress.</Text>
+          <Text style={[styles.ruleCopy, { color: colors.mutedForeground }]}>The scheduled job evaluates the closed week once. A pass requires two completions for every quest that was scheduled during the week. There is no manual early claim.</Text>
         </View>
       </View>
 
-      <Pressable onPress={completeRaid} disabled={raid.completed || completedCount < activeQuests.length} style={[styles.claimButton, { backgroundColor: raid.completed ? colors.muted : colors.primary }, (!raid.completed && completedCount < activeQuests.length) && styles.disabled]}>
-        <Feather name={raid.completed ? 'check-circle' : 'unlock'} size={18} color={raid.completed ? colors.mutedForeground : colors.primaryForeground} />
-        <Text style={[styles.claimText, { color: raid.completed ? colors.mutedForeground : colors.primaryForeground }]}>{raid.completed ? 'RAID CLEARED' : completedCount < activeQuests.length ? 'CLEAR TODAY’S QUESTS TO CLAIM' : 'CLAIM RAID REWARD'}</Text>
+      <Pressable onPress={completeRaid} disabled={!canClaim} style={[styles.claimButton, { backgroundColor: canClaim ? colors.primary : colors.muted }, !canClaim && styles.disabled]}>
+        <Feather name={lastRaidWasClaimed ? 'check-circle' : canClaim ? 'unlock' : 'clock'} size={18} color={canClaim ? colors.primaryForeground : colors.mutedForeground} />
+        <Text style={[styles.claimText, { color: canClaim ? colors.primaryForeground : colors.mutedForeground }]}>
+          {lastRaidWasClaimed ? 'RAID REWARD CLAIMED' : canClaim ? 'CLAIM PASSED RAID REWARD' : lastRaid?.status === 'FAILED' ? 'LAST RAID FAILED // NEW RAID ACTIVE' : 'EVALUATION LOCKED UNTIL WEEK CLOSE'}
+        </Text>
       </Pressable>
     </Screen>
   );

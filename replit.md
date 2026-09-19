@@ -32,6 +32,10 @@ A dark anime-inspired daily quest RPG that turns workouts, coding, and personal 
 - The mobile client is offline-first so quest completion remains usable without a network connection.
 - Clerk owns accounts and sessions; the Python service accepts Clerk bearer tokens at its protected boundary.
 - Native social-app blocking is intentionally not claimed in the first build. The penalty is an in-app 24-hour lockdown with streak reset and XP loss.
+- Progression uses an increasing linear XP curve: level 1 requires 1,000 XP and each next level adds 100 XP to the requirement. Rank thresholds are D8, C15, B25, A35, and S50.
+- Quests grant XP plus one point to their primary stat only. Rest days are excluded from streak and raid requirements rather than counted as completed days.
+- The weekly raid snapshots the week's scheduled quests, requires two completions of each, and is evaluated once after week close by the Python scheduler. Reward claims are idempotent.
+- The penalty has zero illness/travel grace by design. Push-up and sit-up presets ramp 20 → 40 → 60 → 80 → 100 over the first 14 days.
 
 ## Product
 
