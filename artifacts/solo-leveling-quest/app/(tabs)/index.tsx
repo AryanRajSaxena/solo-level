@@ -13,16 +13,25 @@ function QuestRow({
 }: {
   quest: Quest;
   onComplete: () => void;
-  onOpenSensor: () => void;
+  onOpenSensor: (type: 'walk' | 'pushups' | 'situps') => void;
 }) {
   const colors = useColors();
   const completed = quest.completedOn !== null;
-  const isSensorQuest = quest.sensor || quest.id.includes('walk') || quest.title.toLowerCase().includes('walk');
+  const isWalkQuest = quest.sensor || quest.id.includes('walk') || quest.title.toLowerCase().includes('walk');
+  const isPushupQuest = quest.id.includes('pushup') || quest.title.toLowerCase().includes('push-up') || quest.title.toLowerCase().includes('pushup');
+  const isSitupQuest = quest.id.includes('situp') || quest.title.toLowerCase().includes('sit-up') || quest.title.toLowerCase().includes('situp');
+  const isPoseQuest = isPushupQuest || isSitupQuest;
+  const isSensorQuest = isWalkQuest || isPoseQuest;
+
   const categoryColor = quest.category === 'TRAINING' ? '#ffb25c' : quest.category === 'MIND' ? colors.primary : '#b693ff';
 
   const handlePress = () => {
-    if (isSensorQuest && !completed) {
-      onOpenSensor();
+    if (isWalkQuest && !completed) {
+      onOpenSensor('walk');
+    } else if (isPushupQuest && !completed) {
+      onOpenSensor('pushups');
+    } else if (isSitupQuest && !completed) {
+      onOpenSensor('situps');
     } else {
       onComplete();
     }
@@ -43,7 +52,17 @@ function QuestRow({
     >
       <View style={[styles.questIcon, { backgroundColor: `${categoryColor}20` }]}>
         <Feather
-          name={completed ? 'check' : isSensorQuest ? 'navigation' : quest.category === 'MIND' ? 'code' : 'activity'}
+          name={
+            completed
+              ? 'check'
+              : isWalkQuest
+              ? 'navigation'
+              : isPoseQuest
+              ? 'video'
+              : quest.category === 'MIND'
+              ? 'code'
+              : 'activity'
+          }
           size={18}
           color={completed ? colors.primary : (isSensorQuest ? colors.primary : categoryColor)}
         />
@@ -51,7 +70,11 @@ function QuestRow({
       <View style={styles.questCopy}>
         <Text style={[styles.questTitle, { color: colors.foreground }, completed && styles.completedText]}>{quest.title}</Text>
         <Text style={[styles.questDetail, { color: isSensorQuest && !completed ? colors.primary : colors.mutedForeground }]}>
-          {isSensorQuest && !completed ? '🛰️ 3.00 KM · Start sensor trial' : `${quest.detail} · +${quest.xp} XP`}
+          {isWalkQuest && !completed
+            ? '🛰️ 3.00 KM · Start sensor trial'
+            : isPoseQuest && !completed
+            ? `👁️ AI CAMERA · Track ${quest.target} ${quest.unit}`
+            : `${quest.detail} · +${quest.xp} XP`}
         </Text>
       </View>
       <View
@@ -65,8 +88,10 @@ function QuestRow({
       >
         {completed ? (
           <Feather name="check" size={14} color={colors.primaryForeground} />
-        ) : isSensorQuest ? (
+        ) : isWalkQuest ? (
           <Feather name="navigation" size={12} color={colors.primary} />
+        ) : isPoseQuest ? (
+          <Feather name="camera" size={12} color={colors.primary} />
         ) : null}
       </View>
     </Pressable>
@@ -146,7 +171,13 @@ export default function HomeScreen() {
             key={quest.id}
             quest={quest}
             onComplete={() => completeQuest(quest.id)}
-            onOpenSensor={() => router.push({ pathname: '/walk-quest' } as any)}
+            onOpenSensor={(type) => {
+              if (type === 'walk') {
+                router.push({ pathname: '/walk-quest' } as any);
+              } else {
+                router.push({ pathname: '/pose-tracker' as any, params: { exercise: type, questId: quest.id } });
+              }
+            }}
           />
         ))}
         {activeQuests.length === 0 ? (
@@ -161,9 +192,16 @@ export default function HomeScreen() {
       {nextQuest ? (
         <Pressable
           onPress={() => {
-            const isSensor = nextQuest.sensor || nextQuest.id.includes('walk') || nextQuest.title.toLowerCase().includes('walk');
-            if (isSensor) {
+            const isWalk = nextQuest.sensor || nextQuest.id.includes('walk') || nextQuest.title.toLowerCase().includes('walk');
+            const isPushup = nextQuest.id.includes('pushup') || nextQuest.title.toLowerCase().includes('push-up') || nextQuest.title.toLowerCase().includes('pushup');
+            const isSitup = nextQuest.id.includes('situp') || nextQuest.title.toLowerCase().includes('sit-up') || nextQuest.title.toLowerCase().includes('situp');
+
+            if (isWalk) {
               router.push({ pathname: '/walk-quest' } as any);
+            } else if (isPushup) {
+              router.push({ pathname: '/pose-tracker' as any, params: { exercise: 'pushups', questId: nextQuest.id } });
+            } else if (isSitup) {
+              router.push({ pathname: '/pose-tracker' as any, params: { exercise: 'situps', questId: nextQuest.id } });
             } else {
               router.push('/(tabs)/quests');
             }
@@ -176,7 +214,13 @@ export default function HomeScreen() {
         >
           <View style={[styles.nextIcon, { backgroundColor: colors.primary }]}>
             <Feather
-              name={nextQuest.sensor || nextQuest.title.toLowerCase().includes('walk') ? 'navigation' : 'arrow-up-right'}
+              name={
+                nextQuest.sensor || nextQuest.title.toLowerCase().includes('walk')
+                  ? 'navigation'
+                  : nextQuest.id.includes('pushup') || nextQuest.id.includes('situp')
+                  ? 'camera'
+                  : 'arrow-up-right'
+              }
               size={17}
               color={colors.primaryForeground}
             />
