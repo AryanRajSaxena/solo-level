@@ -26,6 +26,12 @@ export default function ProfileScreen() {
         </View>
         <Text style={[styles.name, { color: colors.foreground }]}>{profile.name}</Text>
         <Text style={[styles.title, { color: colors.primary }]}>{profile.title}</Text>
+        {profile.assessmentCompleted ? (
+          <View style={styles.certifiedTag}>
+            <Feather name="shield" size={11} color="#00e5ff" />
+            <Text style={styles.certifiedText}>AI VISION RANK CERTIFIED</Text>
+          </View>
+        ) : null}
         <View style={styles.rankRow}>
           <View style={styles.rankBlock}><Text style={[styles.rank, { color: colors.primary }]}>{profile.rank}</Text><Text style={[styles.label, { color: colors.mutedForeground }]}>RANK</Text></View>
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
@@ -34,6 +40,33 @@ export default function ProfileScreen() {
           <View style={styles.metric}><Text style={[styles.metricValue, { color: colors.foreground }]}>{profile.longestStreak}</Text><Text style={[styles.label, { color: colors.mutedForeground }]}>BEST STREAK</Text></View>
         </View>
       </View>
+
+      {!profile.assessmentCompleted ? (
+        <View style={styles.assessmentCard}>
+          <View style={styles.assessmentHeader}>
+            <View style={styles.assessmentBeacon} />
+            <Text style={styles.assessmentEyebrow}>[SYSTEM] OFFICIAL RANK ASSESSMENT</Text>
+          </View>
+          <Text style={styles.assessmentTitle}>Calibrate your true Hunter Rank</Text>
+          <Text style={styles.assessmentBody}>
+            Undertake the 2-stage AI Vision trial (Push-ups & Sit-ups) to evaluate your genuine Rank and starting Level.
+          </Text>
+          <View style={styles.assessmentWarningBox}>
+            <Feather name="alert-triangle" size={13} color="#ff4d4d" />
+            <Text style={styles.assessmentWarningText}>
+              Caution: Single Attempt Only. Must be completed in one continuous session.
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => router.push('/rank-assessment' as any)}
+            style={styles.assessmentStartBtn}
+          >
+            <Feather name="activity" size={15} color="#050508" />
+            <Text style={styles.assessmentStartBtnText}>COMMENCE AI ASSESSMENT</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       <View style={styles.section}>
         <SectionHeader eyebrow="ATTRIBUTES" title="Core stats" />
         <Text style={[styles.helper, { color: colors.mutedForeground }]}>Each quest awards +1 to its primary stat only. Push-ups build STR; sit-ups and gym build STAMINA; coding builds INT; discipline quests build DISCIPLINE.</Text>
@@ -77,6 +110,98 @@ const styles = StyleSheet.create({
   avatar: { width: 66, height: 66, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   name: { fontSize: 18, fontWeight: '800', marginTop: 14, letterSpacing: 0.5 },
   title: { fontSize: 12, fontWeight: '700', marginTop: 5 },
+  certifiedTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(0, 229, 255, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.4)',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  certifiedText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#00e5ff',
+    letterSpacing: 1,
+  },
+  assessmentCard: {
+    marginTop: 14,
+    borderWidth: 1.5,
+    borderColor: '#c9a227',
+    backgroundColor: 'rgba(201, 162, 39, 0.08)',
+    borderRadius: 18,
+    padding: 16,
+    gap: 10,
+    shadowColor: '#c9a227',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  assessmentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  assessmentBeacon: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#c9a227',
+  },
+  assessmentEyebrow: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#c9a227',
+    letterSpacing: 1.5,
+  },
+  assessmentTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  assessmentBody: {
+    fontSize: 11,
+    color: '#e8d48a',
+    lineHeight: 16,
+  },
+  assessmentWarningBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 77, 77, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 77, 77, 0.3)',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  assessmentWarningText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#ff9999',
+    flex: 1,
+  },
+  assessmentStartBtn: {
+    backgroundColor: '#c9a227',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  assessmentStartBtnText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#050508',
+    letterSpacing: 1.5,
+  },
   rankRow: { flexDirection: 'row', width: '100%', justifyContent: 'space-around', alignItems: 'center', marginTop: 22, paddingTop: 17, borderTopWidth: 1, borderTopColor: '#223551' },
   rankBlock: { alignItems: 'center' },
   rank: { fontSize: 28, fontWeight: '800' },

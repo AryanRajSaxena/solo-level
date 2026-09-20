@@ -53,6 +53,7 @@ export type HunterProfile = {
   title: string;
   lockdownUntil: number | null;
   lastCompletedDate: string | null;
+  assessmentCompleted?: boolean;
 };
 
 export type RaidStatus = 'ACTIVE' | 'PASSED' | 'FAILED' | 'CLAIMED';
@@ -106,6 +107,12 @@ type QuestContextValue = {
   completeOnboarding: (name: string) => void;
   resetPenaltyForDemo: () => void;
   awardAlarmRewards: (xpAmount?: number, disciplineAmount?: number) => void;
+  completeAssessment: (result: {
+    rank: 'E' | 'D' | 'C' | 'B' | 'A' | 'S';
+    level: number;
+    stats: { STR: number; INT: number; STAMINA: number; DISCIPLINE: number };
+    title: string;
+  }) => void;
 };
 
 const STORAGE_KEY = '@solo-leveling-quest/state-v3';
@@ -774,6 +781,44 @@ export function QuestProvider({ children }: { children: React.ReactNode }) {
     }, 0);
   };
 
+  const completeAssessment = (result: {
+    rank: 'E' | 'D' | 'C' | 'B' | 'A' | 'S';
+    level: number;
+    stats: { STR: number; INT: number; STAMINA: number; DISCIPLINE: number };
+    title: string;
+  }) => {
+    let updatedProfile: HunterProfile | null = null;
+    setProfile((current) => {
+      updatedProfile = {
+        ...current,
+        rank: result.rank,
+        level: Math.max(current.level, result.level),
+        stats: {
+          STR: Math.max(current.stats.STR, result.stats.STR),
+          INT: Math.max(current.stats.INT, result.stats.INT),
+          STAMINA: Math.max(current.stats.STAMINA, result.stats.STAMINA),
+          DISCIPLINE: Math.max(current.stats.DISCIPLINE, result.stats.DISCIPLINE),
+        },
+        title: result.title,
+        assessmentCompleted: true,
+        xpToNext: xpToNextForLevel(Math.max(current.level, result.level)),
+      };
+      return updatedProfile;
+    });
+
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    setTimeout(() => {
+      if (!updatedProfile) return;
+      syncProfile({
+        rank: updatedProfile.rank,
+        level: updatedProfile.level,
+        title: updatedProfile.title,
+        stat_discipline: updatedProfile.stats.DISCIPLINE,
+      });
+    }, 0);
+  };
+
   return (
     <QuestContext.Provider
       value={{
@@ -805,6 +850,7 @@ export function QuestProvider({ children }: { children: React.ReactNode }) {
         completeOnboarding,
         resetPenaltyForDemo,
         awardAlarmRewards,
+        completeAssessment,
       }}
     >
       {children}

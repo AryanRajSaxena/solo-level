@@ -30,6 +30,8 @@ import * as Haptics from 'expo-haptics';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuestContext } from '@/context/QuestContext';
 import { useSupabaseAuth } from '@/context/SupabaseAuthProvider';
+import { RankAssessmentScreen } from '@/components/RankAssessmentScreen';
+import { AssessmentResult } from '@/utils/assessmentEvaluation';
 
 // ─────────────────────────────────────────────
 // Design tokens — the Solo Leveling palette
@@ -53,6 +55,8 @@ const { width: W, height: H } = Dimensions.get('window');
 type Step =
   | 'AWAKENING'
   | 'NAME_ENTRY'
+  | 'ASSESSMENT_PROMPT'
+  | 'ASSESSMENT_RUNNING'
   | 'RANK_ASSIGNED'
   | 'STATS_REVEAL'
   | 'QUESTS_ASSIGNED';
@@ -301,13 +305,87 @@ const NameEntryStep = ({ onNext }: { onNext: (name: string) => void }) => {
 };
 
 // ─────────────────────────────────────────────
-// STEP 3: Rank assigned — E-Rank reveal
+// STEP 3: Assessment Prompt Choice
+// ─────────────────────────────────────────────
+const AssessmentPromptStep = ({
+  hunterName,
+  onTakeAssessment,
+  onSkipAssessment,
+}: {
+  hunterName: string;
+  onTakeAssessment: () => void;
+  onSkipAssessment: () => void;
+}) => {
+  const { displayed, isDone } = useTypewriter(
+    `[System] Hunter ${hunterName.toUpperCase()}, physical awakening assessment is available.`,
+    28,
+    300
+  );
+
+  return (
+    <ScrollView contentContainerStyle={styles.assessmentPromptScroll} showsVerticalScrollIndicator={false}>
+      <SystemBox>
+        <Text style={styles.systemText}>
+          {displayed}
+          {!isDone && <Text style={styles.cursor}> |</Text>}
+        </Text>
+      </SystemBox>
+
+      <Animated.View entering={FadeInUp.duration(500).delay(400)} style={styles.assessmentCard}>
+        <Text style={styles.assessmentTitle}>AI VISION RANK CALIBRATION</Text>
+        <Text style={styles.assessmentDesc}>
+          Test your physical limits through AI-monitored Push-ups & Sit-ups to immediately claim your true Rank (E through S) and starting Level (1 to 50+).
+        </Text>
+
+        <View style={styles.assessmentCaution}>
+          <Text style={styles.cautionTitle}>⚠️ SYSTEM NOTICE</Text>
+          <Text style={styles.cautionDesc}>
+            If you skip, you will be assigned default E-Rank (Level 1). You may undertake the official assessment later from your Profile page, but only once.
+          </Text>
+        </View>
+
+        <View style={styles.promptActions}>
+          <TouchableOpacity
+            style={styles.commenceBtn}
+            onPress={async () => {
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+              onTakeAssessment();
+            }}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.commenceBtnText}>START AI RANK ASSESSMENT</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.skipPromptBtn}
+            onPress={async () => {
+              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              onSkipAssessment();
+            }}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.skipPromptBtnText}>SKIP FOR NOW (ASSIGN E-RANK)</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+    </ScrollView>
+  );
+};
+
+// ─────────────────────────────────────────────
+// STEP 4: Rank assigned reveal
 // ─────────────────────────────────────────────
 const RankAssignedStep = ({
   hunterName,
+  rank,
+  level,
+  title,
   onNext,
 }: {
   hunterName: string;
+  rank: 'E' | 'D' | 'C' | 'B' | 'A' | 'S';
+  level: number;
+  title: string;
   onNext: () => void;
 }) => {
   const [showRank, setShowRank] = useState(false);
@@ -315,10 +393,32 @@ const RankAssignedStep = ({
   const rankGlow = useSharedValue(0);
 
   const { displayed, isDone } = useTypewriter(
-    `[System] ${hunterName.toUpperCase()}, your rank has been assessed.`,
+    `[System] ${hunterName.toUpperCase()}, your rank has been verified.`,
     28,
     400
   );
+
+  const getRankColor = (r: string) => {
+    switch (r) {
+      case 'S': return '#b693ff';
+      case 'A': return '#ffb25c';
+      case 'B': return '#00e5ff';
+      case 'C': return '#75e2b6';
+      case 'D': return '#5599e2';
+      default: return '#c9a227';
+    }
+  };
+
+  const getRankQuote = (r: string) => {
+    switch (r) {
+      case 'S': return '"The Monarch has awakened."';
+      case 'A': return '"High-Rank Vanguard classification granted."';
+      case 'B': return '"Elite Strike Force capabilities verified."';
+      case 'C': return '"Dungeon Striker certification complete."';
+      case 'D': return '"Awakened potential unlocked."';
+      default: return '"Every S-Rank began exactly here."';
+    }
+  };
 
   useEffect(() => {
     if (!isDone) return;
@@ -340,7 +440,7 @@ const RankAssignedStep = ({
 
   useEffect(() => {
     if (!showRank) return;
-    const t = setTimeout(onNext, 3000);
+    const t = setTimeout(onNext, 3400);
     return () => clearTimeout(t);
   }, [showRank, onNext]);
 
@@ -348,6 +448,8 @@ const RankAssignedStep = ({
     transform: [{ scale: rankScale.value }],
     shadowOpacity: rankGlow.value,
   }));
+
+  const rankColor = getRankColor(rank);
 
   return (
     <View style={styles.stepContainer}>
@@ -361,25 +463,38 @@ const RankAssignedStep = ({
       {showRank && (
         <Animated.View
           entering={FadeIn.duration(500).delay(200)}
-          style={{ alignItems: 'center', marginTop: 48 }}
+          style={{ alignItems: 'center', marginTop: 36 }}
         >
-          <Animated.View style={[styles.rankBadge, rankStyle]}>
-            <Text style={styles.rankLetter}>E</Text>
-            <Text style={styles.rankSub}>RANK</Text>
+          <Animated.View
+            style={[
+              styles.rankBadge,
+              { borderColor: rankColor, shadowColor: rankColor },
+              rankStyle,
+            ]}
+          >
+            <Text style={[styles.rankLetter, { color: rankColor }]}>{rank}</Text>
+            <Text style={[styles.rankSub, { color: rankColor }]}>RANK</Text>
           </Animated.View>
 
           <Animated.Text
-            entering={FadeInUp.duration(600).delay(600)}
+            entering={FadeInUp.duration(600).delay(500)}
+            style={styles.rankLevelText}
+          >
+            STARTING LEVEL {level} • "{title}"
+          </Animated.Text>
+
+          <Animated.Text
+            entering={FadeInUp.duration(600).delay(700)}
             style={styles.rankQuote}
           >
-            "Every S-Rank began exactly here."
+            {getRankQuote(rank)}
           </Animated.Text>
 
           <Animated.Text
             entering={FadeIn.duration(400).delay(1800)}
             style={styles.autoAdvance}
           >
-            Continuing...
+            Continuing to attributes...
           </Animated.Text>
         </Animated.View>
       )}
@@ -388,20 +503,17 @@ const RankAssignedStep = ({
 };
 
 // ─────────────────────────────────────────────
-// STEP 4: Stats reveal — animated bars
+// STEP 5: Stats reveal — animated bars
 // ─────────────────────────────────────────────
-const STATS = [
-  { key: 'str', label: 'STR', full: 'Strength', value: 10, color: '#d64f4f' },
-  { key: 'int', label: 'INT', full: 'Intelligence', value: 10, color: '#5599e2' },
-  { key: 'stamina', label: 'STA', full: 'Stamina', value: 10, color: '#42c97a' },
-  { key: 'discipline', label: 'DIS', full: 'Discipline', value: 10, color: C.gold },
-] as const;
-
 const StatBar = ({
-  stat,
+  label,
+  value,
+  color,
   index,
 }: {
-  stat: (typeof STATS)[number];
+  label: string;
+  value: number;
+  color: string;
   index: number;
 }) => {
   const barWidth = useSharedValue(0);
@@ -410,12 +522,12 @@ const StatBar = ({
   useEffect(() => {
     barWidth.value = withDelay(
       400 + index * 220,
-      withTiming((stat.value / 100) * maxWidth, {
+      withTiming((Math.min(100, Math.max(10, value * 2)) / 100) * maxWidth, {
         duration: 900,
         easing: Easing.out(Easing.cubic),
       })
     );
-  }, []);
+  }, [value, index, maxWidth]);
 
   const barStyle = useAnimatedStyle(() => ({ width: barWidth.value }));
 
@@ -424,33 +536,46 @@ const StatBar = ({
       entering={FadeInLeft.springify().damping(20).delay(300 + index * 220)}
       style={styles.statRow}
     >
-      <Text style={[styles.statLabel, { color: stat.color }]}>{stat.label}</Text>
+      <Text style={[styles.statLabel, { color }]}>{label}</Text>
       <View style={styles.statBarTrack}>
         <Animated.View
-          style={[styles.statBarFill, { backgroundColor: stat.color }, barStyle]}
+          style={[styles.statBarFill, { backgroundColor: color }, barStyle]}
         />
       </View>
       <Animated.Text
         entering={FadeIn.delay(400 + index * 220 + 600)}
         style={styles.statValue}
       >
-        {stat.value}
+        {value}
       </Animated.Text>
     </Animated.View>
   );
 };
 
-const StatsRevealStep = ({ onNext }: { onNext: () => void }) => {
+const StatsRevealStep = ({
+  stats,
+  onNext,
+}: {
+  stats: { STR: number; INT: number; STAMINA: number; DISCIPLINE: number };
+  onNext: () => void;
+}) => {
   const [showButton, setShowButton] = useState(false);
 
   const { displayed, isDone } = useTypewriter(
-    '[System] Initial stats have been assigned.',
+    '[System] Initial stats have been allocated.',
     30,
     300
   );
 
+  const statsList = [
+    { key: 'str', label: 'STR', value: stats.STR, color: '#d64f4f' },
+    { key: 'int', label: 'INT', value: stats.INT, color: '#5599e2' },
+    { key: 'stamina', label: 'STA', value: stats.STAMINA, color: '#42c97a' },
+    { key: 'discipline', label: 'DIS', value: stats.DISCIPLINE, color: C.gold },
+  ];
+
   useEffect(() => {
-    const delay = 400 + STATS.length * 220 + 900 + 200;
+    const delay = 400 + statsList.length * 220 + 900 + 200;
     const t = setTimeout(() => setShowButton(true), delay);
     return () => clearTimeout(t);
   }, []);
@@ -468,8 +593,14 @@ const StatsRevealStep = ({ onNext }: { onNext: () => void }) => {
       </SystemBox>
 
       <View style={styles.statsBlock}>
-        {STATS.map((stat, i) => (
-          <StatBar key={stat.key} stat={stat} index={i} />
+        {statsList.map((stat, i) => (
+          <StatBar
+            key={stat.key}
+            label={stat.label}
+            value={stat.value}
+            color={stat.color}
+            index={i}
+          />
         ))}
       </View>
 
@@ -489,7 +620,7 @@ const StatsRevealStep = ({ onNext }: { onNext: () => void }) => {
 };
 
 // ─────────────────────────────────────────────
-// STEP 5: Quests assigned
+// STEP 6: Quests assigned
 // ─────────────────────────────────────────────
 const PRESET_QUESTS = [
   { icon: '💪', name: '100 Push-Ups', xp: 40, type: 'Strength' },
@@ -627,7 +758,12 @@ const STEP_ORDER: Step[] = [
 ];
 
 const ProgressDots = ({ current }: { current: Step }) => {
-  const idx = STEP_ORDER.indexOf(current);
+  const visibleStep =
+    current === 'ASSESSMENT_PROMPT' || current === 'ASSESSMENT_RUNNING'
+      ? 'NAME_ENTRY'
+      : current;
+  const idx = STEP_ORDER.indexOf(visibleStep);
+
   return (
     <View style={styles.progressRow}>
       {STEP_ORDER.map((s, i) => (
@@ -656,10 +792,24 @@ export default function OnboardingScreen() {
   const isReplay = params.replay === 'true';
 
   const { isSignedIn, isLoading: authLoading } = useSupabaseAuth();
-  const { onboardingComplete, completeOnboarding, loading: questLoading } = useQuestContext();
+  const {
+    onboardingComplete,
+    completeOnboarding,
+    completeAssessment,
+    loading: questLoading,
+  } = useQuestContext();
 
   const [step, setStep] = useState<Step>('AWAKENING');
   const [hunterName, setHunterName] = useState('');
+  const [assessedRank, setAssessedRank] = useState<'E' | 'D' | 'C' | 'B' | 'A' | 'S'>('E');
+  const [assessedLevel, setAssessedLevel] = useState(1);
+  const [assessedTitle, setAssessedTitle] = useState('E-Rank Hunter');
+  const [assessedStats, setAssessedStats] = useState({
+    STR: 10,
+    INT: 10,
+    STAMINA: 10,
+    DISCIPLINE: 10,
+  });
 
   if (authLoading || questLoading) return null;
   if (!isSignedIn && !isReplay) return <Redirect href="/(auth)/sign-in" />;
@@ -667,6 +817,28 @@ export default function OnboardingScreen() {
 
   const handleNameEntry = useCallback((name: string) => {
     setHunterName(name);
+    setStep('ASSESSMENT_PROMPT');
+  }, []);
+
+  const handleAssessmentResult = useCallback((res: AssessmentResult) => {
+    setAssessedRank(res.rank);
+    setAssessedLevel(res.level);
+    setAssessedTitle(res.title);
+    setAssessedStats(res.stats);
+    completeAssessment({
+      rank: res.rank,
+      level: res.level,
+      stats: res.stats,
+      title: res.title,
+    });
+    setStep('RANK_ASSIGNED');
+  }, [completeAssessment]);
+
+  const handleSkipAssessment = useCallback(() => {
+    setAssessedRank('E');
+    setAssessedLevel(1);
+    setAssessedTitle('E-Rank Hunter');
+    setAssessedStats({ STR: 10, INT: 10, STAMINA: 10, DISCIPLINE: 10 });
     setStep('RANK_ASSIGNED');
   }, []);
 
@@ -681,10 +853,12 @@ export default function OnboardingScreen() {
       <StatusBar barStyle="light-content" backgroundColor={C.bg} />
 
       {/* Starfield */}
-      <StarField />
+      {step !== 'ASSESSMENT_RUNNING' && <StarField />}
 
       {/* Progress dots */}
-      {step !== 'AWAKENING' && <ProgressDots current={step} />}
+      {step !== 'AWAKENING' && step !== 'ASSESSMENT_RUNNING' && (
+        <ProgressDots current={step} />
+      )}
 
       {/* Step content with cross-fade */}
       <Animated.View
@@ -699,14 +873,34 @@ export default function OnboardingScreen() {
         {step === 'NAME_ENTRY' && (
           <NameEntryStep onNext={handleNameEntry} />
         )}
+        {step === 'ASSESSMENT_PROMPT' && (
+          <AssessmentPromptStep
+            hunterName={hunterName}
+            onTakeAssessment={() => setStep('ASSESSMENT_RUNNING')}
+            onSkipAssessment={handleSkipAssessment}
+          />
+        )}
+        {step === 'ASSESSMENT_RUNNING' && (
+          <RankAssessmentScreen
+            hunterName={hunterName}
+            onComplete={handleAssessmentResult}
+            onBack={handleSkipAssessment}
+          />
+        )}
         {step === 'RANK_ASSIGNED' && (
           <RankAssignedStep
             hunterName={hunterName}
+            rank={assessedRank}
+            level={assessedLevel}
+            title={assessedTitle}
             onNext={() => setStep('STATS_REVEAL')}
           />
         )}
         {step === 'STATS_REVEAL' && (
-          <StatsRevealStep onNext={() => setStep('QUESTS_ASSIGNED')} />
+          <StatsRevealStep
+            stats={assessedStats}
+            onNext={() => setStep('QUESTS_ASSIGNED')}
+          />
         )}
         {step === 'QUESTS_ASSIGNED' && (
           <QuestsAssignedStep onNext={() => handleComplete(hunterName)} />
@@ -895,6 +1089,89 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
   },
 
+  // Assessment Prompt Step
+  assessmentPromptScroll: {
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 70 : 48,
+    paddingBottom: 40,
+    gap: 16,
+  },
+  assessmentCard: {
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: 'rgba(201, 162, 39, 0.3)',
+    borderRadius: 12,
+    padding: 18,
+    gap: 12,
+  },
+  assessmentTitle: {
+    color: C.goldLight,
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+  },
+  assessmentDesc: {
+    color: C.text,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  assessmentCaution: {
+    backgroundColor: 'rgba(139, 26, 26, 0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 60, 60, 0.4)',
+    borderRadius: 8,
+    padding: 12,
+    gap: 4,
+  },
+  cautionTitle: {
+    color: '#ff6b6b',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  cautionDesc: {
+    color: '#ffc9c9',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  promptActions: {
+    gap: 10,
+    marginTop: 6,
+  },
+  commenceBtn: {
+    backgroundColor: C.gold,
+    paddingVertical: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    shadowColor: C.gold,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+  },
+  commenceBtnText: {
+    color: C.bg,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 2,
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+  },
+  skipPromptBtn: {
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  skipPromptBtnText: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+  },
+
   // Rank badge
   rankBadge: {
     width: 130,
@@ -925,12 +1202,20 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
   },
+  rankLevelText: {
+    color: C.white,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    marginTop: 18,
+    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
+  },
   rankQuote: {
     color: C.muted,
     fontSize: 13,
     fontStyle: 'italic',
     textAlign: 'center',
-    marginTop: 28,
+    marginTop: 8,
     letterSpacing: 0.5,
   },
   autoAdvance: {
