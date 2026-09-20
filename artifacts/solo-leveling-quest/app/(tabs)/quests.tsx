@@ -31,7 +31,14 @@ export default function QuestsScreen() {
   }, [timer]);
 
   const claimCompletion = (quest: Quest) => {
+    const isSensorQuest = quest.sensor || quest.id.includes('walk') || quest.title.toLowerCase().includes('walk');
     const alreadyComplete = quest.completedOn === todayKey || activeQuests.some((item) => item.id === quest.id && item.completedOn === todayKey);
+    
+    if (isSensorQuest && !alreadyComplete) {
+      router.push({ pathname: '/walk-quest' } as any);
+      return;
+    }
+
     if (alreadyComplete) return;
     const levelUp = profile.xp + quest.xp >= profile.xpToNext;
     completeQuest(quest.id);
@@ -84,6 +91,7 @@ export default function QuestsScreen() {
         const progressPercent = Math.round((progress / quest.target) * 100);
         const isTiming = timer?.questId === quest.id;
         const elapsedSeconds = isTiming ? Math.floor((now - (timer?.startedAt ?? now)) / 1000) : 0;
+        const isSensorQuest = quest.sensor || quest.id.includes('walk') || quest.title.toLowerCase().includes('walk');
         return (
           <View key={quest.id} style={[styles.card, { backgroundColor: colors.card, borderColor: completed ? colors.primary : colors.border }]}>
             <View style={[styles.icon, { backgroundColor: `${meta.color}20` }]}>
@@ -94,21 +102,25 @@ export default function QuestsScreen() {
               <Text style={[styles.detail, { color: colors.mutedForeground }]}>{quest.detail} · {quest.target} {quest.unit}</Text>
               {!completed ? <>
                 <View style={styles.progressHeader}>
-                  <Text style={[styles.progressText, { color: colors.mutedForeground }]}>{progress} / {quest.target} {quest.unit}</Text>
-                  <View style={styles.progressControls}>
-                    <Pressable onPress={() => setQuestProgress(quest.id, progress - 1)} hitSlop={6}><Feather name="minus-circle" size={17} color={colors.mutedForeground} /></Pressable>
-                    <Pressable onPress={() => setQuestProgress(quest.id, progress + 1)} hitSlop={6}><Feather name="plus-circle" size={17} color={colors.primary} /></Pressable>
-                  </View>
+                  <Text style={[styles.progressText, { color: isSensorQuest ? colors.primary : colors.mutedForeground }]}>
+                    {isSensorQuest ? '🛰️ 3.00 KM SENSOR TRACKING' : `${progress} / ${quest.target} ${quest.unit}`}
+                  </Text>
+                  {!isSensorQuest ? (
+                    <View style={styles.progressControls}>
+                      <Pressable onPress={() => setQuestProgress(quest.id, progress - 1)} hitSlop={6}><Feather name="minus-circle" size={17} color={colors.mutedForeground} /></Pressable>
+                      <Pressable onPress={() => setQuestProgress(quest.id, progress + 1)} hitSlop={6}><Feather name="plus-circle" size={17} color={colors.primary} /></Pressable>
+                    </View>
+                  ) : null}
                 </View>
                 <View style={[styles.progressTrack, { backgroundColor: colors.muted }]}><View style={[styles.progressFill, { width: `${progressPercent}%`, backgroundColor: meta.color }]} /></View>
                 {quest.unit === 'min' ? <Pressable onPress={() => toggleTimer(quest)} style={[styles.timerButton, { borderColor: isTiming ? colors.primary : colors.border }]}><Feather name={isTiming ? 'square' : 'play'} size={11} color={colors.primary} /><Text style={[styles.timerText, { color: colors.primary }]}>{isTiming ? `STOP ${String(Math.floor(elapsedSeconds / 60)).padStart(2, '0')}:${String(elapsedSeconds % 60).padStart(2, '0')}` : 'START TIMER'}</Text></Pressable> : null}
-                {(quest.sensor || quest.id.includes('walk') || quest.title.toLowerCase().includes('walk')) ? (
+                {isSensorQuest ? (
                   <Pressable
                     onPress={() => router.push({ pathname: '/walk-quest' } as any)}
                     style={[styles.sensorButton, { borderColor: colors.primary, backgroundColor: `${colors.primary}18` }]}
                   >
                     <Feather name="navigation" size={12} color={colors.primary} />
-                    <Text style={[styles.sensorButtonText, { color: colors.primary }]}>START GPS SENSOR QUEST</Text>
+                    <Text style={[styles.sensorButtonText, { color: colors.primary }]}>START GPS SENSOR WALK</Text>
                   </Pressable>
                 ) : null}
               </> : null}
@@ -121,9 +133,19 @@ export default function QuestsScreen() {
               <Pressable
                 testID={`complete-${quest.id}`}
                 onPress={() => claimCompletion(quest)}
-                style={[styles.check, { borderColor: completed ? colors.primary : colors.border, backgroundColor: completed ? colors.primary : 'transparent' }]}
+                style={[
+                  styles.check,
+                  {
+                    borderColor: completed ? colors.primary : (isSensorQuest ? colors.primary : colors.border),
+                    backgroundColor: completed ? colors.primary : 'transparent',
+                  },
+                ]}
               >
-                {completed ? <Feather name="check" color={colors.primaryForeground} size={14} /> : null}
+                {completed ? (
+                  <Feather name="check" color={colors.primaryForeground} size={14} />
+                ) : isSensorQuest ? (
+                  <Feather name="navigation" color={colors.primary} size={12} />
+                ) : null}
               </Pressable>
               {quest.isCustom ? (
                 <Pressable onPress={() => removeQuest(quest.id)} hitSlop={8}>

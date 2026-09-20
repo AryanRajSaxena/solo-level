@@ -306,14 +306,9 @@ export const WalkingQuestScreen = ({ onComplete, onBack }: WalkingQuestScreenPro
       {/* Controls */}
       <View style={styles.controls}>
         {state.status === 'idle' || state.status === 'permission_denied' ? (
-          <View style={{ gap: 10 }}>
-            <TouchableOpacity style={styles.startBtn} onPress={startWalk} activeOpacity={0.85}>
-              <Text style={styles.startBtnText}>START SENSOR WALK</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.simBtn} onPress={startSimulation} activeOpacity={0.8}>
-              <Text style={styles.simBtnText}>⚡ FAST SIMULATOR (TEST)</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={styles.startBtn} onPress={startWalk} activeOpacity={0.85}>
+            <Text style={styles.startBtnText}>START SENSOR WALK</Text>
+          </TouchableOpacity>
         ) : isActive ? (
           <View style={styles.activeControls}>
             <TouchableOpacity style={styles.pauseBtn} onPress={pauseWalk} activeOpacity={0.85}>
