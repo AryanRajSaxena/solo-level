@@ -105,6 +105,7 @@ type QuestContextValue = {
   updateNotificationPreferences: (updates: Partial<NotificationPreferences>) => Promise<boolean>;
   completeOnboarding: (name: string) => void;
   resetPenaltyForDemo: () => void;
+  awardAlarmRewards: (xpAmount?: number, disciplineAmount?: number) => void;
 };
 
 const STORAGE_KEY = '@solo-leveling-quest/state-v3';
@@ -745,6 +746,34 @@ export function QuestProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const awardAlarmRewards = (xpAmount = 50, disciplineAmount = 1) => {
+    let updatedProfile: HunterProfile | null = null;
+    setProfile((current) => {
+      const next = addXp(current, xpAmount, 'DISCIPLINE');
+      updatedProfile = {
+        ...next,
+        stats: {
+          ...next.stats,
+          DISCIPLINE: next.stats.DISCIPLINE + (disciplineAmount > 0 ? disciplineAmount - 1 : 0),
+        },
+      };
+      return updatedProfile;
+    });
+
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    setTimeout(() => {
+      if (!updatedProfile) return;
+      syncProfile({
+        xp: updatedProfile.xp,
+        level: updatedProfile.level,
+        xpToNext: updatedProfile.xpToNext,
+        rank: updatedProfile.rank,
+        stat_discipline: updatedProfile.stats.DISCIPLINE,
+      });
+    }, 0);
+  };
+
   return (
     <QuestContext.Provider
       value={{
@@ -775,6 +804,7 @@ export function QuestProvider({ children }: { children: React.ReactNode }) {
         updateNotificationPreferences,
         completeOnboarding,
         resetPenaltyForDemo,
+        awardAlarmRewards,
       }}
     >
       {children}

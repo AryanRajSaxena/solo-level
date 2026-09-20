@@ -463,11 +463,16 @@ export function syncRaidClaim(
   })();
 }
 
-/** Update hunter profile fields (name, title, etc.) in Supabase. */
+/** Update hunter profile fields in Supabase. */
 export function syncProfile(updates: {
   name?: string;
   title?: string;
   journey_start_date?: string;
+  xp?: number;
+  level?: number;
+  xpToNext?: number;
+  rank?: string;
+  stat_discipline?: number;
 }): void {
   void (async () => {
     try {
@@ -477,8 +482,17 @@ export function syncProfile(updates: {
       if (updates.name !== undefined) payload.name = updates.name;
       if (updates.title !== undefined) payload.title = updates.title;
       if (updates.journey_start_date !== undefined) payload.journey_start_date = updates.journey_start_date;
+      if (updates.xp !== undefined) payload.xp = updates.xp;
+      if (updates.level !== undefined) payload.level = updates.level;
+      if (updates.xpToNext !== undefined) payload.xp_to_next = updates.xpToNext;
+      if (updates.rank !== undefined) payload.rank = updates.rank;
+      if (updates.stat_discipline !== undefined) payload.stat_discipline = updates.stat_discipline;
       if (Object.keys(payload).length === 0) return;
-      const { error } = await supabase.from('profiles').update(payload).eq('user_id', user.id);
+
+      const { error } = await supabase
+        .from('profiles')
+        .update(payload)
+        .eq('user_id', user.id);
       if (error) console.error('[sync] syncProfile error:', error.message);
     } catch (e) {
       console.error('[sync] syncProfile failed:', e);
