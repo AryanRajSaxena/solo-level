@@ -6,29 +6,68 @@ import { Screen, SectionHeader, IconButton } from '@/components/Screen';
 import { useColors } from '@/hooks/useColors';
 import { useQuestContext, Quest } from '@/context/QuestContext';
 
-function QuestRow({ quest, onComplete }: { quest: Quest; onComplete: () => void }) {
+function QuestRow({
+  quest,
+  onComplete,
+  onOpenSensor,
+}: {
+  quest: Quest;
+  onComplete: () => void;
+  onOpenSensor: () => void;
+}) {
   const colors = useColors();
   const completed = quest.completedOn !== null;
+  const isSensorQuest = quest.sensor || quest.id.includes('walk') || quest.title.toLowerCase().includes('walk');
   const categoryColor = quest.category === 'TRAINING' ? '#ffb25c' : quest.category === 'MIND' ? colors.primary : '#b693ff';
+
+  const handlePress = () => {
+    if (isSensorQuest && !completed) {
+      onOpenSensor();
+    } else {
+      onComplete();
+    }
+  };
+
   return (
     <Pressable
       testID={`quest-${quest.id}`}
-      onPress={onComplete}
+      onPress={handlePress}
       style={({ pressed }) => [
         styles.questRow,
-        { backgroundColor: colors.card, borderColor: completed ? colors.primary : colors.border },
+        {
+          backgroundColor: colors.card,
+          borderColor: completed ? colors.primary : (isSensorQuest ? colors.primary : colors.border),
+        },
         pressed && styles.pressed,
       ]}
     >
       <View style={[styles.questIcon, { backgroundColor: `${categoryColor}20` }]}>
-        <Feather name={completed ? 'check' : quest.category === 'MIND' ? 'code' : 'activity'} size={18} color={completed ? colors.primary : categoryColor} />
+        <Feather
+          name={completed ? 'check' : isSensorQuest ? 'navigation' : quest.category === 'MIND' ? 'code' : 'activity'}
+          size={18}
+          color={completed ? colors.primary : (isSensorQuest ? colors.primary : categoryColor)}
+        />
       </View>
       <View style={styles.questCopy}>
         <Text style={[styles.questTitle, { color: colors.foreground }, completed && styles.completedText]}>{quest.title}</Text>
-        <Text style={[styles.questDetail, { color: colors.mutedForeground }]}>{quest.detail} · +{quest.xp} XP</Text>
+        <Text style={[styles.questDetail, { color: isSensorQuest && !completed ? colors.primary : colors.mutedForeground }]}>
+          {isSensorQuest && !completed ? '🛰️ 3.00 KM · Start sensor trial' : `${quest.detail} · +${quest.xp} XP`}
+        </Text>
       </View>
-      <View style={[styles.questCheck, { borderColor: completed ? colors.primary : colors.border, backgroundColor: completed ? colors.primary : 'transparent' }]}>
-        {completed ? <Feather name="check" size={14} color={colors.primaryForeground} /> : null}
+      <View
+        style={[
+          styles.questCheck,
+          {
+            borderColor: completed ? colors.primary : (isSensorQuest ? colors.primary : colors.border),
+            backgroundColor: completed ? colors.primary : 'transparent',
+          },
+        ]}
+      >
+        {completed ? (
+          <Feather name="check" size={14} color={colors.primaryForeground} />
+        ) : isSensorQuest ? (
+          <Feather name="navigation" size={12} color={colors.primary} />
+        ) : null}
       </View>
     </Pressable>
   );
@@ -103,7 +142,12 @@ export default function HomeScreen() {
           </View>
         </View>
         {activeQuests.slice(0, 3).map((quest) => (
-          <QuestRow key={quest.id} quest={quest} onComplete={() => completeQuest(quest.id)} />
+          <QuestRow
+            key={quest.id}
+            quest={quest}
+            onComplete={() => completeQuest(quest.id)}
+            onOpenSensor={() => router.push({ pathname: '/walk-quest' } as any)}
+          />
         ))}
         {activeQuests.length === 0 ? (
           <View style={[styles.empty, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -115,16 +159,34 @@ export default function HomeScreen() {
       </View>
 
       {nextQuest ? (
-        <View style={[styles.nextCard, { borderColor: colors.border, backgroundColor: colors.accent }]}>
+        <Pressable
+          onPress={() => {
+            const isSensor = nextQuest.sensor || nextQuest.id.includes('walk') || nextQuest.title.toLowerCase().includes('walk');
+            if (isSensor) {
+              router.push({ pathname: '/walk-quest' } as any);
+            } else {
+              router.push('/(tabs)/quests');
+            }
+          }}
+          style={({ pressed }) => [
+            styles.nextCard,
+            { borderColor: colors.border, backgroundColor: colors.accent },
+            pressed && styles.pressed,
+          ]}
+        >
           <View style={[styles.nextIcon, { backgroundColor: colors.primary }]}>
-            <Feather name="arrow-up-right" size={17} color={colors.primaryForeground} />
+            <Feather
+              name={nextQuest.sensor || nextQuest.title.toLowerCase().includes('walk') ? 'navigation' : 'arrow-up-right'}
+              size={17}
+              color={colors.primaryForeground}
+            />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.nextLabel, { color: colors.primary }]}>NEXT OBJECTIVE</Text>
             <Text style={[styles.nextTitle, { color: colors.foreground }]}>{nextQuest.title}</Text>
           </View>
           <Text style={[styles.nextXp, { color: colors.foreground }]}>+{nextQuest.xp}</Text>
-        </View>
+        </Pressable>
       ) : null}
     </Screen>
   );

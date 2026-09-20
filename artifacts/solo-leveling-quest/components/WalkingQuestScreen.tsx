@@ -188,53 +188,60 @@ export const WalkingQuestScreen = ({ onComplete, onBack }: WalkingQuestScreenPro
 
   const confirmStop = useCallback(() => {
     Alert.alert(
-      'Abort Walking Protocol?',
-      'Your recorded distance will be lost and the quest will reset.',
+      'QUEST FAILURE WARNING',
+      'This quest cannot be paused and must be completed in one continuous run. Aborting now will result in immediate QUEST FAILURE and all distance will be reset to 0.',
       [
-        { text: 'Keep Walking', style: 'cancel' },
-        { text: 'Abort', style: 'destructive', onPress: stopWalk },
+        { text: 'Continue Walking', style: 'cancel' },
+        { text: 'Fail & Exit', style: 'destructive', onPress: () => { stopWalk(); onBack(); } },
       ],
     );
-  }, [stopWalk]);
+  }, [stopWalk, onBack]);
 
   const isActive  = state.status === 'active';
-  const isPaused  = state.status === 'paused';
   const isDone    = state.status === 'completed';
-  const isRunning = isActive || isPaused;
 
   const progressFraction = state.distanceM / TARGET_DISTANCE_M;
 
   const statusLabel =
-    state.status === 'idle'                  ? '[System] Quest ready. Begin walking.' :
+    state.status === 'idle'                  ? '[System] Quest ready. 3.00 km non-stop trial.' :
     state.status === 'requesting_permission' ? '[System] Calibrating GPS sensors...' :
     state.status === 'permission_denied'     ? '[System] Error: Location permission required.' :
-    state.status === 'active'               ? (state.isSimulating ? '[System] Fast Simulator Active...' : '[System] Recording movement sensor...') :
-    state.status === 'paused'               ? '[System] Walk paused. Sensors standby.' :
+    state.status === 'active'               ? '[System] Active sensor recording... Non-stop protocol.' :
     '[System] Quest cleared.';
 
   const statusColor =
     state.status === 'permission_denied' ? C.red :
-    state.status === 'paused'            ? C.muted :
     C.cyanLight;
 
   return (
     <View style={styles.screen}>
       <StatusBar barStyle="light-content" backgroundColor={C.bg} />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn} disabled={isRunning}>
-          <Text style={[styles.backText, isRunning && { opacity: 0.3 }]}>
-            <Feather name="arrow-left" size={14} /> Back
-          </Text>
+      {/* Top minimal status bar (Header removed) */}
+      <View style={styles.topMinimalBar}>
+        <TouchableOpacity
+          onPress={isActive ? confirmStop : onBack}
+          style={styles.closeBtn}
+          hitSlop={10}
+        >
+          <Feather name="x" size={20} color={C.muted} />
         </TouchableOpacity>
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerEyebrow}>DAILY QUEST</Text>
-          <Text style={styles.headerTitle}>3 KM WALKING PROTOCOL</Text>
-        </View>
         <View style={styles.gpsIndicator}>
           <GpsDot active={isActive} />
-          <Text style={styles.gpsLabel}>GPS</Text>
+          <Text style={styles.gpsLabel}>{isActive ? 'SENSORS ACTIVE' : 'GPS STANDBY'}</Text>
+        </View>
+      </View>
+
+      {/* Caution Box */}
+      <View style={styles.cautionContainer}>
+        <View style={styles.cautionBox}>
+          <View style={styles.cautionHeader}>
+            <Feather name="alert-triangle" size={13} color="#ffb25c" />
+            <Text style={styles.cautionTitle}>SYSTEM PROTOCOL // ONE-GO TRIAL</Text>
+          </View>
+          <Text style={styles.cautionText}>
+            This walk must be completed in a single continuous session. Pausing is prohibited. Exiting or stopping will result in immediate quest failure.
+          </Text>
         </View>
       </View>
 
@@ -303,30 +310,17 @@ export const WalkingQuestScreen = ({ onComplete, onBack }: WalkingQuestScreenPro
         />
       </View>
 
-      {/* Controls */}
+      {/* Controls (Start or Abort only - No Pause) */}
       <View style={styles.controls}>
         {state.status === 'idle' || state.status === 'permission_denied' ? (
           <TouchableOpacity style={styles.startBtn} onPress={startWalk} activeOpacity={0.85}>
-            <Text style={styles.startBtnText}>START SENSOR WALK</Text>
+            <Text style={styles.startBtnText}>START 3.00 KM TRIAL</Text>
           </TouchableOpacity>
         ) : isActive ? (
-          <View style={styles.activeControls}>
-            <TouchableOpacity style={styles.pauseBtn} onPress={pauseWalk} activeOpacity={0.85}>
-              <Text style={styles.pauseBtnText}>PAUSE</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.stopBtn} onPress={confirmStop} activeOpacity={0.85}>
-              <Text style={styles.stopBtnText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-        ) : isPaused ? (
-          <View style={styles.activeControls}>
-            <TouchableOpacity style={styles.startBtn} onPress={resumeWalk} activeOpacity={0.85}>
-              <Text style={styles.startBtnText}>RESUME</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.stopBtn} onPress={confirmStop} activeOpacity={0.85}>
-              <Text style={styles.stopBtnText}>✕</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={styles.abortBtn} onPress={confirmStop} activeOpacity={0.85}>
+            <Feather name="slash" size={16} color={C.red} style={{ marginRight: 8 }} />
+            <Text style={styles.abortBtnText}>ABORT TRIAL (FAIL QUEST)</Text>
+          </TouchableOpacity>
         ) : null}
       </View>
 
@@ -355,38 +349,55 @@ const styles = StyleSheet.create({
     backgroundColor: C.bg,
     paddingTop: Platform.OS === 'ios' ? 56 : 28,
   },
-  header: {
-    flexDirection:  'row',
-    alignItems:     'center',
+  topMinimalBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    marginBottom: 16,
+    marginBottom: 12,
   },
-  backBtn: { padding: 6 },
-  backText: { color: C.muted, fontSize: 13, fontWeight: '600' },
-  headerTitleContainer: { alignItems: 'center' },
-  headerEyebrow: { fontSize: 9, letterSpacing: 2, color: C.cyan, fontWeight: '800' },
-  headerTitle: { fontSize: 12, letterSpacing: 3, color: C.text, fontWeight: '800', marginTop: 2 },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   gpsIndicator: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  gpsLabel: { fontSize: 10, color: C.muted, letterSpacing: 1, fontWeight: '700' },
+  gpsLabel: { fontSize: 9, color: C.muted, letterSpacing: 1.2, fontWeight: '800' },
   gpsDot: { width: 8, height: 8, borderRadius: 4 },
 
-  statusRow: { paddingHorizontal: 20, marginBottom: 20 },
+  cautionContainer: { paddingHorizontal: 20, marginBottom: 14 },
+  cautionBox: {
+    borderWidth: 1,
+    borderColor: 'rgba(255, 178, 92, 0.35)',
+    backgroundColor: 'rgba(255, 178, 92, 0.08)',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 4,
+  },
+  cautionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  cautionTitle: { fontSize: 10, fontWeight: '900', color: '#ffb25c', letterSpacing: 1.2 },
+  cautionText: { fontSize: 11, color: '#e8d48a', lineHeight: 16 },
+
+  statusRow: { paddingHorizontal: 20, marginBottom: 14 },
   systemBox: {
     borderWidth: 1, borderColor: C.border,
     backgroundColor: 'rgba(12, 16, 29, 0.95)',
-    paddingVertical: 12, paddingHorizontal: 14,
+    paddingVertical: 10, paddingHorizontal: 14,
     borderRadius: 8,
   },
   systemText: {
-    fontSize: 12, color: C.cyanLight, lineHeight: 18,
+    fontSize: 11, color: C.cyanLight, lineHeight: 16,
     letterSpacing: 0.5,
   },
 
   ringContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   ring: { position: 'absolute' },
   ringCenter: {
@@ -396,39 +407,39 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   distanceValue: {
-    fontSize: 50, fontWeight: '800',
+    fontSize: 48, fontWeight: '800',
     color: '#ffffff',
-    lineHeight: 54,
+    lineHeight: 52,
     letterSpacing: 1,
   },
-  distanceUnit:   { fontSize: 14, color: C.cyan, letterSpacing: 2, fontWeight: '800' },
-  distanceTarget: { fontSize: 12, color: C.muted, marginTop: 4, letterSpacing: 1 },
+  distanceUnit:   { fontSize: 13, color: C.cyan, letterSpacing: 2, fontWeight: '800' },
+  distanceTarget: { fontSize: 11, color: C.muted, marginTop: 3, letterSpacing: 1 },
   pctBadge: {
-    marginTop: 8,
+    marginTop: 6,
     borderWidth: 1, borderColor: C.border,
     backgroundColor: C.cyanDim,
     paddingVertical: 2, paddingHorizontal: 10,
     borderRadius: 12,
   },
-  pctText: { fontSize: 11, color: C.cyan, letterSpacing: 1, fontWeight: '700' },
+  pctText: { fontSize: 10, color: C.cyan, letterSpacing: 1, fontWeight: '700' },
 
   statsRow: {
     flexDirection:  'row',
     justifyContent: 'center',
     marginHorizontal: 20,
-    marginBottom: 24,
+    marginBottom: 20,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
     borderRadius: 12,
     backgroundColor: C.surface,
-    paddingVertical: 14,
+    paddingVertical: 12,
   },
   statCell:    { flex: 1, alignItems: 'center' },
-  statValue:   { fontSize: 18, fontWeight: '700', color: C.text, marginBottom: 2 },
-  statLabel:   { fontSize: 9, color: C.muted, letterSpacing: 1, fontWeight: '600' },
+  statValue:   { fontSize: 17, fontWeight: '700', color: C.text, marginBottom: 2 },
+  statLabel:   { fontSize: 8, color: C.muted, letterSpacing: 1, fontWeight: '700' },
   statDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.07)', marginVertical: 4 },
 
   milestoneRow: {
-    marginHorizontal: 28, marginBottom: 28,
+    marginHorizontal: 28, marginBottom: 22,
     height: 32, position: 'relative',
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between',
@@ -458,31 +469,24 @@ const styles = StyleSheet.create({
   },
   startBtnText: {
     color: '#000000', fontSize: 13,
-    letterSpacing: 2, fontWeight: '800',
+    letterSpacing: 2, fontWeight: '900',
   },
-  simBtn: {
-    borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)',
-    paddingVertical: 12, borderRadius: 10,
+  abortBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-  },
-  simBtnText: {
-    color: C.muted, fontSize: 11,
-    letterSpacing: 1, fontWeight: '700',
-  },
-  activeControls: { flexDirection: 'row', gap: 12 },
-  pauseBtn: {
-    flex: 1, borderWidth: 1, borderColor: C.cyan,
-    backgroundColor: C.cyanDim,
-    paddingVertical: 16, borderRadius: 10, alignItems: 'center',
-  },
-  pauseBtnText: { color: C.cyan, fontSize: 13, letterSpacing: 2, fontWeight: '800' },
-  stopBtn: {
-    width: 56, borderWidth: 1, borderColor: C.red,
+    justifyContent: 'center',
     backgroundColor: 'rgba(255, 42, 85, 0.12)',
-    paddingVertical: 16, borderRadius: 10, alignItems: 'center',
+    borderWidth: 1,
+    borderColor: C.red,
+    paddingVertical: 15,
+    borderRadius: 10,
   },
-  stopBtnText: { color: C.red, fontSize: 16, fontWeight: '800' },
+  abortBtnText: {
+    color: C.red,
+    fontSize: 12,
+    letterSpacing: 1.5,
+    fontWeight: '800',
+  },
 
   rewardHint: { alignItems: 'center', paddingHorizontal: 20 },
   rewardText:  { fontSize: 10, color: C.muted, letterSpacing: 1, fontWeight: '700' },
