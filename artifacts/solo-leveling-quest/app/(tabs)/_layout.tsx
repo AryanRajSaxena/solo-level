@@ -52,82 +52,72 @@ function ClassicTabLayout() {
       screenOptions={{
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
-        headerShown: true,
+        headerShown: false,
         tabBarStyle: {
           position: 'absolute',
-          backgroundColor: isIOS ? 'transparent' : colors.background,
-          borderTopWidth: isWeb ? 1 : 0,
+          backgroundColor: isIOS ? 'rgba(7, 11, 19, 0.85)' : colors.background,
+          borderTopWidth: 1,
           borderTopColor: colors.border,
           elevation: 0,
-          ...(isWeb ? { height: 84 } : {}),
+          paddingTop: 6,
+          ...(isWeb ? { height: 72, paddingBottom: 14 } : { height: 64, paddingBottom: 8 }),
+        },
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: '700',
+          letterSpacing: 0.5,
         },
         tabBarBackground: () =>
           isIOS ? (
             <BlurView
-              intensity={100}
+              intensity={80}
               tint={isDark ? 'dark' : 'light'}
               style={StyleSheet.absoluteFill}
             />
-          ) : isWeb ? (
+          ) : (
             <View
               style={[
                 StyleSheet.absoluteFill,
                 { backgroundColor: colors.background },
               ]}
             />
-          ) : null,
+          ),
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="house" tintColor={color} size={24} />
-            ) : (
-              <Feather name="home" size={22} color={color} />
-            ),
+          headerShown: false,
+          tabBarIcon: ({ color }) => <Feather name="home" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="quests"
         options={{
           title: 'Quests',
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="checklist" tintColor={color} size={24} />
-            ) : (
-              <Feather name="check-square" size={22} color={color} />
-            ),
+          headerShown: false,
+          tabBarIcon: ({ color }) => <Feather name="check-square" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="raid"
         options={{
           title: 'Raid',
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="bolt.fill" tintColor={color} size={24} />
-            ) : (
-              <Feather name="zap" size={22} color={color} />
-            ),
+          headerShown: false,
+          tabBarIcon: ({ color }) => <Feather name="zap" size={22} color={color} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Hunter',
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="person.crop.circle" tintColor={color} size={24} />
-            ) : (
-              <Feather name="user" size={22} color={color} />
-            ),
+          headerShown: false,
+          tabBarIcon: ({ color }) => <Feather name="user" size={22} color={color} />,
         }}
       />
-      <Tabs.Screen name="settings" options={{ href: null }} />
-      <Tabs.Screen name="history" options={{ href: null }} />
+      <Tabs.Screen name="settings" options={{ href: null, headerShown: false }} />
+      <Tabs.Screen name="history" options={{ href: null, headerShown: false }} />
     </Tabs>
   );
 }
@@ -146,8 +136,5 @@ export default function TabLayout() {
     return <Redirect href="/onboarding" />;
   }
 
-  if (isLiquidGlassAvailable()) {
-    return <NativeTabLayout />;
-  }
   return <ClassicTabLayout />;
 }

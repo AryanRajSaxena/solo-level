@@ -6,6 +6,11 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { QuestProviderRoot } from '@/context/QuestProviderRoot';
 import { SupabaseAuthProvider } from '@/context/SupabaseAuthProvider';
+import Feather from '@expo/vector-icons/Feather';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -21,7 +26,7 @@ SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerBackTitle: 'Back', contentStyle: { backgroundColor: '#070b13' } }}>
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#070b13' } }}>
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false, animation: 'fade' }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -37,6 +42,11 @@ export default function RootLayout() {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
+    ...Feather.font,
+    ...Ionicons.font,
+    ...MaterialCommunityIcons.font,
+    ...MaterialIcons.font,
+    ...FontAwesome.font,
   });
 
   useEffect(() => {
