@@ -1,6 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Screen, SectionHeader } from '@/components/Screen';
 import { useColors } from '@/hooks/useColors';
 import { Quest, QuestCategory, useQuestContext } from '@/context/QuestContext';
@@ -13,6 +14,7 @@ const categoryMeta: Record<QuestCategory, { icon: keyof typeof Feather.glyphMap;
 };
 
 export default function QuestsScreen() {
+  const router = useRouter();
   const colors = useColors();
   const { quests, activeQuests, completeQuest, setQuestProgress, addQuest, removeQuest, profile, todayKey } = useQuestContext();
   const [modalVisible, setModalVisible] = useState(false);
@@ -100,6 +102,15 @@ export default function QuestsScreen() {
                 </View>
                 <View style={[styles.progressTrack, { backgroundColor: colors.muted }]}><View style={[styles.progressFill, { width: `${progressPercent}%`, backgroundColor: meta.color }]} /></View>
                 {quest.unit === 'min' ? <Pressable onPress={() => toggleTimer(quest)} style={[styles.timerButton, { borderColor: isTiming ? colors.primary : colors.border }]}><Feather name={isTiming ? 'square' : 'play'} size={11} color={colors.primary} /><Text style={[styles.timerText, { color: colors.primary }]}>{isTiming ? `STOP ${String(Math.floor(elapsedSeconds / 60)).padStart(2, '0')}:${String(elapsedSeconds % 60).padStart(2, '0')}` : 'START TIMER'}</Text></Pressable> : null}
+                {(quest.sensor || quest.id.includes('walk') || quest.title.toLowerCase().includes('walk')) ? (
+                  <Pressable
+                    onPress={() => router.push({ pathname: '/walk-quest' } as any)}
+                    style={[styles.sensorButton, { borderColor: colors.primary, backgroundColor: `${colors.primary}18` }]}
+                  >
+                    <Feather name="navigation" size={12} color={colors.primary} />
+                    <Text style={[styles.sensorButtonText, { color: colors.primary }]}>START GPS SENSOR QUEST</Text>
+                  </Pressable>
+                ) : null}
               </> : null}
               <View style={styles.metaLine}>
                 <Text style={[styles.category, { color: meta.color }]}>{quest.category}</Text>
@@ -184,6 +195,8 @@ const styles = StyleSheet.create({
   progressFill: { height: '100%', borderRadius: 2 },
   timerButton: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start', marginTop: 8 },
   timerText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
+  sensorButton: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, alignSelf: 'flex-start', marginTop: 8 },
+  sensorButtonText: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
   category: { fontSize: 9, fontWeight: '800', letterSpacing: 1 },
   xp: { fontSize: 10, fontWeight: '700' },
   actions: { alignItems: 'center', gap: 12, marginLeft: 10 },
