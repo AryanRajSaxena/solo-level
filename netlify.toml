@@ -2,9 +2,8 @@
 # Docs: https://docs.netlify.com/configure-builds/file-based-configuration/
 
 [build]
-  base = "artifacts/solo-leveling-quest"
-  publish = "dist"
-  command = "npx expo export -p web"
+  command = "cd artifacts/solo-leveling-quest && npx expo export -p web"
+  publish = "artifacts/solo-leveling-quest/dist"
 
 [build.environment]
   NODE_VERSION = "20"

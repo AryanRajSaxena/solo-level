@@ -12,8 +12,10 @@
     },
     "android": {},
     "web": {
+      "bundler": "metro",
       "favicon": "./assets/images/icon.png"
     },
+    "platforms": ["ios", "android", "web"],
     "plugins": ["expo-router", "expo-notifications"],
     "experiments": {
       "typedRoutes": true,
