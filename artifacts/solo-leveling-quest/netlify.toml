@@ -1,8 +1,8 @@
 # Netlify Configuration for Solo Leveling Quest (Project-level)
 
 [build]
-  publish = "dist"
-  command = "npx expo export -p web"
+  command = "cd artifacts/solo-leveling-quest 2>/dev/null || true; npx expo export -p web"
+  publish = "artifacts/solo-leveling-quest/dist"
 
 [build.environment]
   NODE_VERSION = "20"
