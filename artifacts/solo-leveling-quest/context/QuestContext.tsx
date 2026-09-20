@@ -33,6 +33,7 @@ export type Quest = {
   progress?: number;
   isCustom?: boolean;
   rampKey?: 'PUSHUPS' | 'SITUPS';
+  sensor?: boolean;
 };
 
 export type HunterProfile = {
@@ -180,6 +181,19 @@ const starterQuests: Quest[] = [
     stat: 'DISCIPLINE',
     weekdays: [1, 2, 3, 4, 5, 6, 0],
     completedOn: null,
+  },
+  {
+    id: 'walk_3km',
+    title: 'Walk 3 km',
+    detail: 'Traverse the gate on foot',
+    category: 'TRAINING',
+    target: 3,
+    unit: 'km',
+    xp: 150,
+    stat: 'STAMINA',
+    weekdays: [1, 2, 3, 4, 5, 6, 0],
+    completedOn: null,
+    sensor: true,
   },
 ];
 

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * supabaseSync.ts
  *
  * Direct Supabase sync layer - replaces the Python FastAPI backend entirely.
@@ -130,6 +130,7 @@ function mapQuestRow(
     completedOn: dates.includes(today) ? today : null,
     isCustom: (q.is_custom as boolean) ?? false,
     rampKey: (q.ramp_key as 'PUSHUPS' | 'SITUPS' | null) ?? undefined,
+    sensor: (q.id as string).includes('walk_3km') || ((q.title as string) ?? '').toLowerCase().includes('walk'),
   };
 }
 
@@ -159,6 +160,7 @@ const STARTER_QUESTS = (userId: string) => [
   { id: `${userId}_gym`, user_id: userId, title: 'Gym regimen', detail: '45 min minimum', category: 'TRAINING', target: 45, unit: 'min', xp: 55, stat: 'STAMINA', weekdays: [1, 3, 5], is_custom: false, ramp_key: null },
   { id: `${userId}_coding`, user_id: userId, title: 'Deep work coding', detail: 'No distractions', category: 'MIND', target: 60, unit: 'min', xp: 65, stat: 'INT', weekdays: [0, 1, 2, 3, 4, 5, 6], is_custom: false, ramp_key: null },
   { id: `${userId}_gum`, user_id: userId, title: 'Chew gum', detail: 'Sharpen the jawline', category: 'DISCIPLINE', target: 20, unit: 'min', xp: 15, stat: 'DISCIPLINE', weekdays: [0, 1, 2, 3, 4, 5, 6], is_custom: false, ramp_key: null },
+  { id: `${userId}_walk_3km`, user_id: userId, title: 'Walk 3 km', detail: 'Traverse the gate on foot', category: 'TRAINING', target: 3, unit: 'km', xp: 150, stat: 'STAMINA', weekdays: [0, 1, 2, 3, 4, 5, 6], is_custom: false, ramp_key: null },
 ];
 
 export async function seedStarterQuests(userId: string): Promise<Array<Record<string, unknown>>> {

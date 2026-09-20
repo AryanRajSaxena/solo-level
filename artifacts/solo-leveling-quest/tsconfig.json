@@ -16,7 +16,8 @@
     "expo-env.d.ts"
   ],
   "exclude": [
-    "effects"
+    "effects",
+    "walk"
   ],
   "references": [
     {
