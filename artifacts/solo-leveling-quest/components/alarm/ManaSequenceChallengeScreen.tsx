@@ -239,3 +239,4 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'ios' ? 24 : 12,
   },
 });
+
