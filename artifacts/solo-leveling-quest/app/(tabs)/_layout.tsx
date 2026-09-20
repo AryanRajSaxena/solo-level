@@ -7,7 +7,8 @@ import { isLiquidGlassAvailable } from 'expo-glass-effect';
 import { Tabs } from 'expo-router';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { SymbolView } from 'expo-symbols';
-import { useAuth } from '@clerk/expo';
+import { useSupabaseAuth } from '@/context/SupabaseAuthProvider';
+import { useQuestContext } from '@/context/QuestContext';
 import { Redirect } from 'expo-router';
 
 // IMPORTANT: iOS 26 uses NativeTabs for native tabs with liquid glass support.
@@ -126,15 +127,23 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen name="settings" options={{ href: null }} />
+      <Tabs.Screen name="history" options={{ href: null }} />
     </Tabs>
   );
 }
 
 export default function TabLayout() {
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, isLoading } = useSupabaseAuth();
+  const { loading, onboardingComplete } = useQuestContext();
+
+  if (isLoading || loading) return null;
 
   if (!isSignedIn) {
     return <Redirect href="/(auth)/sign-in" />;
+  }
+
+  if (!onboardingComplete) {
+    return <Redirect href="/onboarding" />;
   }
 
   if (isLiquidGlassAvailable()) {

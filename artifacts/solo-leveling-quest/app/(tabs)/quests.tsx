@@ -1,9 +1,9 @@
 import { Feather } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Screen, SectionHeader } from '@/components/Screen';
 import { useColors } from '@/hooks/useColors';
-import { QuestCategory, useQuestContext } from '@/context/QuestContext';
+import { Quest, QuestCategory, useQuestContext } from '@/context/QuestContext';
 
 const categoryMeta: Record<QuestCategory, { icon: keyof typeof Feather.glyphMap; color: string }> = {
   TRAINING: { icon: 'activity', color: '#ffb25c' },
@@ -14,10 +14,37 @@ const categoryMeta: Record<QuestCategory, { icon: keyof typeof Feather.glyphMap;
 
 export default function QuestsScreen() {
   const colors = useColors();
-  const { quests, activeQuests, completeQuest, addQuest, removeQuest } = useQuestContext();
+  const { quests, activeQuests, completeQuest, setQuestProgress, addQuest, removeQuest, profile, todayKey } = useQuestContext();
   const [modalVisible, setModalVisible] = useState(false);
   const [title, setTitle] = useState('');
   const [detail, setDetail] = useState('');
+  const [reward, setReward] = useState<{ quest: Quest; levelUp: boolean; nextLevel: number } | null>(null);
+  const [timer, setTimer] = useState<{ questId: string; startedAt: number } | null>(null);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (!timer) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [timer]);
+
+  const claimCompletion = (quest: Quest) => {
+    const alreadyComplete = quest.completedOn === todayKey || activeQuests.some((item) => item.id === quest.id && item.completedOn === todayKey);
+    if (alreadyComplete) return;
+    const levelUp = profile.xp + quest.xp >= profile.xpToNext;
+    completeQuest(quest.id);
+    setReward({ quest, levelUp, nextLevel: profile.level + (levelUp ? 1 : 0) });
+  };
+
+  const toggleTimer = (quest: Quest) => {
+    if (timer?.questId === quest.id) {
+      const elapsedMinutes = Math.floor((Date.now() - timer.startedAt) / 60000);
+      setQuestProgress(quest.id, (quest.progress ?? 0) + elapsedMinutes);
+      setTimer(null);
+      return;
+    }
+    setTimer({ questId: quest.id, startedAt: Date.now() });
+  };
 
   const saveQuest = () => {
     if (!title.trim()) return;
@@ -51,6 +78,10 @@ export default function QuestsScreen() {
       {quests.map((quest) => {
         const meta = categoryMeta[quest.category];
         const completed = activeQuests.some((item) => item.id === quest.id && item.completedOn !== null);
+        const progress = completed ? quest.target : Math.min(quest.target, quest.progress ?? 0);
+        const progressPercent = Math.round((progress / quest.target) * 100);
+        const isTiming = timer?.questId === quest.id;
+        const elapsedSeconds = isTiming ? Math.floor((now - (timer?.startedAt ?? now)) / 1000) : 0;
         return (
           <View key={quest.id} style={[styles.card, { backgroundColor: colors.card, borderColor: completed ? colors.primary : colors.border }]}>
             <View style={[styles.icon, { backgroundColor: `${meta.color}20` }]}>
@@ -59,6 +90,17 @@ export default function QuestsScreen() {
             <View style={styles.copy}>
               <Text style={[styles.title, { color: colors.foreground }]}>{quest.title}</Text>
               <Text style={[styles.detail, { color: colors.mutedForeground }]}>{quest.detail} · {quest.target} {quest.unit}</Text>
+              {!completed ? <>
+                <View style={styles.progressHeader}>
+                  <Text style={[styles.progressText, { color: colors.mutedForeground }]}>{progress} / {quest.target} {quest.unit}</Text>
+                  <View style={styles.progressControls}>
+                    <Pressable onPress={() => setQuestProgress(quest.id, progress - 1)} hitSlop={6}><Feather name="minus-circle" size={17} color={colors.mutedForeground} /></Pressable>
+                    <Pressable onPress={() => setQuestProgress(quest.id, progress + 1)} hitSlop={6}><Feather name="plus-circle" size={17} color={colors.primary} /></Pressable>
+                  </View>
+                </View>
+                <View style={[styles.progressTrack, { backgroundColor: colors.muted }]}><View style={[styles.progressFill, { width: `${progressPercent}%`, backgroundColor: meta.color }]} /></View>
+                {quest.unit === 'min' ? <Pressable onPress={() => toggleTimer(quest)} style={[styles.timerButton, { borderColor: isTiming ? colors.primary : colors.border }]}><Feather name={isTiming ? 'square' : 'play'} size={11} color={colors.primary} /><Text style={[styles.timerText, { color: colors.primary }]}>{isTiming ? `STOP ${String(Math.floor(elapsedSeconds / 60)).padStart(2, '0')}:${String(elapsedSeconds % 60).padStart(2, '0')}` : 'START TIMER'}</Text></Pressable> : null}
+              </> : null}
               <View style={styles.metaLine}>
                 <Text style={[styles.category, { color: meta.color }]}>{quest.category}</Text>
                 <Text style={[styles.xp, { color: colors.primary }]}>+{quest.xp} XP / {quest.stat}</Text>
@@ -67,7 +109,7 @@ export default function QuestsScreen() {
             <View style={styles.actions}>
               <Pressable
                 testID={`complete-${quest.id}`}
-                onPress={() => completeQuest(quest.id)}
+                onPress={() => claimCompletion(quest)}
                 style={[styles.check, { borderColor: completed ? colors.primary : colors.border, backgroundColor: completed ? colors.primary : 'transparent' }]}
               >
                 {completed ? <Feather name="check" color={colors.primaryForeground} size={14} /> : null}
@@ -102,6 +144,24 @@ export default function QuestsScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={Boolean(reward)} transparent animationType="fade" onRequestClose={() => setReward(null)}>
+        <View style={styles.rewardBackdrop}>
+          <View style={[styles.rewardCard, { backgroundColor: colors.card, borderColor: colors.primary }]}>
+            <View style={[styles.rewardIcon, { backgroundColor: colors.accent, borderColor: colors.primary }]}>
+              <Feather name={reward?.levelUp ? 'award' : 'check'} size={28} color={colors.primary} />
+            </View>
+            <Text style={[styles.rewardEyebrow, { color: colors.primary }]}>{reward?.levelUp ? 'SYSTEM // LEVEL UP' : 'SYSTEM // QUEST CLEARED'}</Text>
+            <Text style={[styles.rewardTitle, { color: colors.foreground }]}>{reward?.levelUp ? `LEVEL ${reward.nextLevel} REACHED` : reward?.quest.title}</Text>
+            <Text style={[styles.rewardCopy, { color: colors.mutedForeground }]}>
+              {reward?.levelUp ? 'Your rank evaluation draws closer. Your attributes have increased.' : `+${reward?.quest.xp ?? 0} XP · +1 ${reward?.quest.stat ?? ''}`}
+            </Text>
+            <Pressable onPress={() => setReward(null)} style={[styles.rewardButton, { backgroundColor: colors.primary }]}>
+              <Text style={[styles.saveText, { color: colors.primaryForeground }]}>ACKNOWLEDGE</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </Screen>
   );
 }
@@ -117,6 +177,13 @@ const styles = StyleSheet.create({
   title: { fontSize: 14, fontWeight: '700' },
   detail: { fontSize: 11, marginTop: 4 },
   metaLine: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 8 },
+  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
+  progressText: { fontSize: 11, fontWeight: '600' },
+  progressControls: { flexDirection: 'row', gap: 8 },
+  progressTrack: { height: 4, borderRadius: 2, marginTop: 6, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 2 },
+  timerButton: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start', marginTop: 8 },
+  timerText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
   category: { fontSize: 9, fontWeight: '800', letterSpacing: 1 },
   xp: { fontSize: 10, fontWeight: '700' },
   actions: { alignItems: 'center', gap: 12, marginLeft: 10 },
@@ -131,4 +198,11 @@ const styles = StyleSheet.create({
   saveButton: { height: 50, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginTop: 3 },
   saveText: { fontSize: 12, fontWeight: '800', letterSpacing: 1.2 },
   disabled: { opacity: 0.45 },
+  rewardBackdrop: { flex: 1, backgroundColor: '#000000b8', justifyContent: 'center', padding: 24 },
+  rewardCard: { borderWidth: 1, borderRadius: 24, padding: 24, alignItems: 'center' },
+  rewardIcon: { width: 67, height: 67, borderRadius: 21, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  rewardEyebrow: { fontSize: 10, fontWeight: '900', letterSpacing: 1.8, marginTop: 20 },
+  rewardTitle: { fontSize: 21, fontWeight: '900', textAlign: 'center', marginTop: 10 },
+  rewardCopy: { fontSize: 13, lineHeight: 20, textAlign: 'center', marginTop: 8 },
+  rewardButton: { width: '100%', height: 50, borderRadius: 13, alignItems: 'center', justifyContent: 'center', marginTop: 24 },
 });

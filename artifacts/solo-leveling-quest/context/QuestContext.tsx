@@ -2,7 +2,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import { SchedulableTriggerInputTypes } from 'expo-notifications';
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Platform } from 'react-native';
+import {
+  fetchServerState,
+  syncDeleteQuest,
+  syncNewQuest,
+  syncPenalty,
+  syncProfile,
+  syncQuestCompletion,
+  syncRaidClaim,
+  syncRestDays,
+} from './supabaseSync';
+import { useSupabaseAuth } from './SupabaseAuthProvider';
 
 export type QuestCategory = 'TRAINING' | 'MIND' | 'DISCIPLINE' | 'RECOVERY';
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
@@ -18,6 +30,7 @@ export type Quest = {
   stat: 'STR' | 'INT' | 'STAMINA' | 'DISCIPLINE';
   weekdays: Weekday[];
   completedOn: string | null;
+  progress?: number;
   isCustom?: boolean;
   rampKey?: 'PUSHUPS' | 'SITUPS';
 };
@@ -43,7 +56,15 @@ export type HunterProfile = {
 
 export type RaidStatus = 'ACTIVE' | 'PASSED' | 'FAILED' | 'CLAIMED';
 
+export type NotificationPreferences = {
+  dailyReminders: boolean;
+  streakWarnings: boolean;
+  raidAlerts: boolean;
+  lockdownAlerts: boolean;
+};
+
 export type Raid = {
+  id?: string;
   name: string;
   detail: string;
   target: number;
@@ -57,6 +78,7 @@ export type Raid = {
 
 type QuestContextValue = {
   quests: Quest[];
+  completionHistory: Record<string, string[]>;
   profile: HunterProfile;
   raid: Raid;
   restDays: Weekday[];
@@ -70,20 +92,31 @@ type QuestContextValue = {
   raidPercent: number;
   lastRaid: Raid | null;
   isLockedDown: boolean;
+  notificationPreferences: NotificationPreferences;
+  onboardingComplete: boolean;
   completeQuest: (id: string) => void;
+  setQuestProgress: (id: string, progress: number) => void;
   addQuest: (quest: Omit<Quest, 'id' | 'completedOn' | 'isCustom'>) => void;
   removeQuest: (id: string) => void;
   toggleRestDay: (day: Weekday) => void;
   completeRaid: () => void;
   scheduleReminders: () => Promise<boolean>;
+  updateNotificationPreferences: (updates: Partial<NotificationPreferences>) => Promise<boolean>;
+  completeOnboarding: (name: string) => void;
   resetPenaltyForDemo: () => void;
 };
 
-const STORAGE_KEY = '@solo-leveling-quest/state-v1';
+const STORAGE_KEY = '@solo-leveling-quest/state-v3';
 const DAY_LABELS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 const XP_BASE = 1000;
 const XP_STEP_PER_LEVEL = 100;
 const RAMP_TARGETS = [20, 40, 60, 80, 100];
+const defaultNotificationPreferences: NotificationPreferences = {
+  dailyReminders: false,
+  streakWarnings: true,
+  raidAlerts: true,
+  lockdownAlerts: true,
+};
 
 const starterQuests: Quest[] = [
   {
@@ -152,14 +185,14 @@ const starterQuests: Quest[] = [
 
 const initialProfile: HunterProfile = {
   name: 'AWAKENED HUNTER',
-  level: 12,
-  xp: 1240,
-  xpToNext: 2100,
-  rank: 'C',
-  streak: 6,
-  longestStreak: 12,
-  stats: { STR: 28, INT: 24, STAMINA: 31, DISCIPLINE: 26 },
-  title: 'The Relentless',
+  level: 1,
+  xp: 0,
+  xpToNext: 1000,
+  rank: 'E',
+  streak: 0,
+  longestStreak: 0,
+  stats: { STR: 1, INT: 1, STAMINA: 1, DISCIPLINE: 1 },
+  title: 'E-Rank Hunter',
   lockdownUntil: null,
   lastCompletedDate: null,
 };
@@ -317,14 +350,35 @@ export function QuestProvider({ children }: { children: React.ReactNode }) {
   const [raid, setRaid] = useState<Raid>(() => createRaid(starterQuests, [0]));
   const [lastRaid, setLastRaid] = useState<Raid | null>(null);
   const [restDays, setRestDays] = useState<Weekday[]>([0]);
-  const [loading, setLoading] = useState(true);
+  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>(defaultNotificationPreferences);
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
+  const { isSignedIn, isLoading: authLoading, user } = useSupabaseAuth();
+  const storageKey = `${STORAGE_KEY}:${user?.id ?? 'guest'}`;
+  const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>(null);
+  const loading = hydratedStorageKey !== storageKey;
   const todayKey = dateKey();
   const today = new Date();
   const todayIndex = today.getDay() as Weekday;
 
   useEffect(() => {
+    let cancelled = false;
+
     void (async () => {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
+      // State must be isolated by Supabase user. Otherwise a newly-created
+      // account can inherit the previous user's locally cached progression.
+      setQuests(starterQuests);
+      setProfile(initialProfile);
+      setCompletionHistory({});
+      setJourneyStartDate(dateKey());
+      setRaid(createRaid(starterQuests, [0]));
+      setLastRaid(null);
+      setRestDays([0]);
+      setNotificationPreferences(defaultNotificationPreferences);
+      setOnboardingComplete(false);
+
+      const raw = await AsyncStorage.getItem(storageKey);
+      if (cancelled) return;
+
       if (raw) {
         try {
           const saved = JSON.parse(raw) as {
@@ -335,6 +389,8 @@ export function QuestProvider({ children }: { children: React.ReactNode }) {
             completionHistory?: CompletionHistory;
             journeyStartDate?: string;
             lastRaid?: Raid | null;
+            notificationPreferences?: NotificationPreferences;
+            onboardingComplete?: boolean;
           };
           const savedRestDays = saved.restDays ?? [0];
           const savedQuests = saved.quests ?? starterQuests;
@@ -350,6 +406,8 @@ export function QuestProvider({ children }: { children: React.ReactNode }) {
           setCompletionHistory(savedHistory);
           setJourneyStartDate(savedStartDate);
           setRestDays(savedRestDays);
+          setNotificationPreferences({ ...defaultNotificationPreferences, ...saved.notificationPreferences });
+          setOnboardingComplete(saved.onboardingComplete ?? false);
           if (storedRaid.weekKey === weekKey()) {
             setRaid(storedRaid);
             setLastRaid(saved.lastRaid ?? null);
@@ -358,17 +416,113 @@ export function QuestProvider({ children }: { children: React.ReactNode }) {
             setRaid(createRaid(savedQuests, savedRestDays, weekKey()));
           }
         } catch {
-          await AsyncStorage.removeItem(STORAGE_KEY);
+          await AsyncStorage.removeItem(storageKey);
         }
       }
-      setLoading(false);
+
+      if (!cancelled) setHydratedStorageKey(storageKey);
     })();
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [storageKey]);
 
   useEffect(() => {
     if (loading) return;
-    void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ quests, profile, raid, restDays, completionHistory, journeyStartDate, lastRaid }));
-  }, [loading, profile, quests, raid, restDays, completionHistory, journeyStartDate, lastRaid]);
+    void AsyncStorage.setItem(storageKey, JSON.stringify({ quests, profile, raid, restDays, completionHistory, journeyStartDate, lastRaid, notificationPreferences, onboardingComplete }));
+  }, [completionHistory, journeyStartDate, lastRaid, loading, notificationPreferences, onboardingComplete, profile, quests, raid, restDays, storageKey]);
+
+  // ---- Server sync: pull state on launch ----
+  const hasSynced = useRef(false);
+  useEffect(() => {
+    hasSynced.current = false;
+  }, [user?.id]);
+
+  useEffect(() => {
+    // Wait for local storage to load, auth to be ready, and user to be signed in
+    if (loading || authLoading || !isSignedIn || hasSynced.current) return;
+    hasSynced.current = true;
+
+    void (async () => {
+      try {
+        const serverState = await fetchServerState();
+        if (!serverState) return; // offline or not authenticated — keep local state
+
+        // Merge strategy: server wins for profile progression if it's ahead
+        const serverProfile = serverState.profile;
+        setProfile((local) => {
+          // Use whichever profile is more progressed (higher level, or same level but more XP)
+          const serverAhead =
+            serverProfile.level > local.level ||
+            (serverProfile.level === local.level && serverProfile.xp > local.xp);
+          return serverAhead
+            ? {
+                ...local,
+                ...serverProfile,
+                lockdownUntil: serverProfile.lockdownUntil,
+              }
+            : local;
+        });
+        if (serverProfile.level > 1 || serverProfile.xp > 0) setOnboardingComplete(true);
+
+        // Merge quests: keep local custom quests, update server-known quests
+        if (serverState.quests.length > 0) {
+          setQuests((localQuests) => {
+            const serverIds = new Set(serverState.quests.map((q) => q.id));
+            const localOnlyCustom = localQuests.filter((q) => q.isCustom && !serverIds.has(q.id));
+            return [...serverState.quests as Quest[], ...localOnlyCustom];
+          });
+        }
+
+        // Merge completion history: union of both
+        setCompletionHistory((local) => {
+          const merged = { ...local };
+          for (const [date, ids] of Object.entries(serverState.dailyHistory)) {
+            const existing = merged[date] ?? [];
+            const combined = [...new Set([...existing, ...ids])];
+            merged[date] = combined;
+          }
+          return merged;
+        });
+
+        // Rest days: server wins
+        if (serverState.restDays) {
+          setRestDays(serverState.restDays as Weekday[]);
+        }
+
+        // Raid: carry the server-issued id so syncRaidClaim works
+        if (serverState.raid) {
+          setRaid((local) => ({
+            ...local,
+            id: serverState.raid!.id,
+            status: serverState.raid!.status as RaidStatus,
+            weekKey: serverState.raid!.weekKey,
+            requiredQuestIds: serverState.raid!.requiredQuestIds,
+            target: serverState.raid!.target,
+          }));
+        }
+        if (serverState.lastRaid) {
+          setLastRaid((local) => ({
+            ...(local ?? {
+              name: serverState.lastRaid!.name,
+              detail: serverState.lastRaid!.detail,
+              target: serverState.lastRaid!.target,
+              unit: serverState.lastRaid!.unit,
+              xp: serverState.lastRaid!.xp,
+              weekKey: serverState.lastRaid!.weekKey,
+              requiredQuestIds: serverState.lastRaid!.requiredQuestIds,
+              evaluatedAt: serverState.lastRaid!.evaluatedAt,
+            }),
+            id: serverState.lastRaid!.id,
+            status: serverState.lastRaid!.status as RaidStatus,
+          }));
+        }
+      } catch (error) {
+        console.error('[sync] Initial server sync failed:', error);
+      }
+    })();
+  }, [authLoading, isSignedIn, loading]);
 
   const displayQuests = useMemo(
     () => quests.map((quest) => applyRamp(quest, journeyStartDate, todayKey)),
@@ -402,67 +556,186 @@ export function QuestProvider({ children }: { children: React.ReactNode }) {
     if (!quest || quest.completedOn === todayKey || completionHistory[todayKey]?.includes(id)) return;
     const nextHistory = { ...completionHistory, [todayKey]: [...(completionHistory[todayKey] ?? []), id] };
     setCompletionHistory(nextHistory);
-    setQuests((current) => current.map((item) => (item.id === id ? { ...item, completedOn: todayKey } : item)));
+
+    let updatedProfile: HunterProfile | null = null;
+    setQuests((current) => current.map((item) => (item.id === id ? { ...item, completedOn: todayKey, progress: item.target } : item)));
     setProfile((current) => {
       const next = addXp(current, quest.xp, quest.stat);
       const dayStreak = isDateComplete(todayKey, nextHistory, displayQuests, restDays)
         ? calculateStreak(current, todayKey, nextHistory, displayQuests, restDays)
         : current.streak;
-      return {
+      updatedProfile = {
         ...next,
         lastCompletedDate: isDateComplete(todayKey, nextHistory, displayQuests, restDays) ? todayKey : current.lastCompletedDate,
         streak: dayStreak,
         longestStreak: Math.max(next.longestStreak, dayStreak),
       };
+      return updatedProfile;
     });
+
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    // Sync to Supabase directly after state update settles
+    setTimeout(() => {
+      if (!updatedProfile) return;
+      const statKey = `stat_${quest.stat.toLowerCase()}`;
+      syncQuestCompletion(id, {
+        xp: updatedProfile.xp,
+        level: updatedProfile.level,
+        xpToNext: updatedProfile.xpToNext,
+        rank: updatedProfile.rank,
+        statKey,
+        statValue: updatedProfile.stats[quest.stat],
+        streak: updatedProfile.streak,
+        longestStreak: updatedProfile.longestStreak,
+        lastCompletedDate: updatedProfile.lastCompletedDate,
+      });
+    }, 0);
+  };
+
+  const setQuestProgress = (id: string, progress: number) => {
+    const quest = displayQuests.find((item) => item.id === id);
+    if (!quest || quest.completedOn === todayKey) return;
+    const nextProgress = Math.max(0, Math.min(quest.target, Math.floor(progress)));
+    setQuests((current) => current.map((item) => (item.id === id ? { ...item, progress: nextProgress } : item)));
+    if (nextProgress >= quest.target) completeQuest(id);
   };
 
   const addQuest = (quest: Omit<Quest, 'id' | 'completedOn' | 'isCustom'>) => {
+    const localId = `${Date.now()}`;
     setQuests((current) => [
       ...current,
-      { ...quest, id: `${Date.now()}`, completedOn: null, isCustom: true },
+      { ...quest, id: localId, completedOn: null, isCustom: true },
     ]);
+    syncNewQuest({ ...quest, id: localId });
   };
 
   const removeQuest = (id: string) => {
     setQuests((current) => current.filter((quest) => quest.id !== id));
+    syncDeleteQuest(id);
   };
 
   const toggleRestDay = (day: Weekday) => {
-    setRestDays((current) => (current.includes(day) ? current.filter((item) => item !== day) : [...current, day]));
+    setRestDays((current) => {
+      const next = current.includes(day) ? current.filter((item) => item !== day) : [...current, day];
+      syncRestDays(next);
+      return next;
+    });
   };
 
   const completeRaid = () => {
     if (!lastRaid || lastRaid.status !== 'PASSED') return;
+    const raidId = lastRaid.id ?? '';
     setLastRaid((current) => current ? { ...current, status: 'CLAIMED' } : current);
-    setProfile((current) => addXp({ ...current, title: 'Breaker of the Architect', stats: { ...current.stats, DISCIPLINE: current.stats.DISCIPLINE + 3 } }, lastRaid.xp, 'DISCIPLINE'));
+    setProfile((current) => {
+      const next = addXp(
+        { ...current, title: 'Breaker of the Architect', stats: { ...current.stats, DISCIPLINE: current.stats.DISCIPLINE + 3 } },
+        lastRaid.xp,
+        'DISCIPLINE'
+      );
+      if (raidId) {
+        syncRaidClaim(raidId, {
+          xp: next.xp,
+          level: next.level,
+          xpToNext: next.xpToNext,
+          rank: next.rank,
+          title: next.title,
+          statDiscipline: next.stats.DISCIPLINE,
+        });
+      }
+      return next;
+    });
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
-  const scheduleReminders = async () => {
-    const permission = await Notifications.requestPermissionsAsync();
+  const scheduleNotifications = async (preferences: NotificationPreferences) => {
+    // expo-notifications cannot schedule background notifications on web.
+    if (Platform.OS === 'web') return false;
+
+    if (Object.values(preferences).every((enabled) => !enabled)) {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      return true;
+    }
+
+    const currentPermission = await Notifications.getPermissionsAsync();
+    const permission = currentPermission.granted
+      ? currentPermission
+      : await Notifications.requestPermissionsAsync();
     if (!permission.granted) return false;
+
     await Notifications.cancelAllScheduledNotificationsAsync();
-    await Notifications.scheduleNotificationAsync({
-      content: { title: 'SYSTEM // Daily quests await', body: 'The dungeon is open. Start your training.' },
-      trigger: { type: SchedulableTriggerInputTypes.CALENDAR, hour: 7, minute: 30, repeats: true },
-    });
-    await Notifications.scheduleNotificationAsync({
-      content: { title: 'SYSTEM // Deadline warning', body: `${activeQuests.length - completedCount} quests remain before midnight.` },
-      trigger: { type: SchedulableTriggerInputTypes.CALENDAR, hour: 21, minute: 0, repeats: true },
-    });
+
+    if (preferences.dailyReminders) {
+      await Notifications.scheduleNotificationAsync({
+        content: { title: 'SYSTEM // Daily gate opened', body: 'The dungeon is open. Begin your training.' },
+        trigger: { type: SchedulableTriggerInputTypes.CALENDAR, hour: 7, minute: 30, repeats: true },
+      });
+      await Notifications.scheduleNotificationAsync({
+        content: { title: 'SYSTEM // Deadline warning', body: 'Your daily evaluation ends at midnight.' },
+        trigger: { type: SchedulableTriggerInputTypes.CALENDAR, hour: 21, minute: 0, repeats: true },
+      });
+    }
+
+    if (preferences.streakWarnings) {
+      await Notifications.scheduleNotificationAsync({
+        content: { title: 'SYSTEM // Streak at risk', body: 'Complete your remaining quests before midnight to protect your streak.' },
+        trigger: { type: SchedulableTriggerInputTypes.CALENDAR, hour: 22, minute: 0, repeats: true },
+      });
+    }
+
+    if (preferences.raidAlerts) {
+      await Notifications.scheduleNotificationAsync({
+        content: { title: 'SYSTEM // Gate opens', body: 'The Architect\'s Trial is now active. Prepare for this week\'s raid.' },
+        // Expo weekdays are 1-indexed: Sunday is 1, Monday is 2.
+        trigger: { type: SchedulableTriggerInputTypes.CALENDAR, weekday: 2, hour: 8, minute: 0, repeats: true },
+      });
+    }
+
     return true;
   };
 
+  const scheduleReminders = () => scheduleNotifications({
+    ...notificationPreferences,
+    dailyReminders: true,
+  });
+
+  const updateNotificationPreferences = async (updates: Partial<NotificationPreferences>) => {
+    const next = { ...notificationPreferences, ...updates };
+    const scheduled = await scheduleNotifications(next);
+    if (scheduled) setNotificationPreferences(next);
+    return scheduled;
+  };
+
+  const completeOnboarding = (name: string) => {
+    const hunterName = name.trim().slice(0, 30);
+    if (hunterName) {
+      const upper = hunterName.toUpperCase();
+      setProfile((current) => ({ ...current, name: upper }));
+      syncProfile({ name: upper });
+    }
+    setOnboardingComplete(true);
+  };
+
   const resetPenaltyForDemo = () => {
-    setProfile((current) => ({ ...current, lockdownUntil: Date.now() + 24 * 60 * 60 * 1000, streak: 0, lastCompletedDate: null, xp: Math.max(0, current.xp - 100) }));
+    const lockdownUntil = Date.now() + 24 * 60 * 60 * 1000;
+    setProfile((current) => {
+      const newXp = Math.max(0, current.xp - 100);
+      syncPenalty({ lockdownUntil, xp: newXp });
+      return { ...current, lockdownUntil, streak: 0, lastCompletedDate: null, xp: newXp };
+    });
+    if (notificationPreferences.lockdownAlerts && Platform.OS !== 'web') {
+      void Notifications.scheduleNotificationAsync({
+        content: { title: 'SYSTEM // LOCKDOWN ACTIVATED', body: 'Your streak was reset. Social lockdown remains active for 24 hours.' },
+        trigger: null,
+      });
+    }
   };
 
   return (
     <QuestContext.Provider
       value={{
         quests,
+        completionHistory,
         profile,
         raid,
         restDays,
@@ -476,12 +749,17 @@ export function QuestProvider({ children }: { children: React.ReactNode }) {
         raidPercent,
         lastRaid,
         isLockedDown,
+        notificationPreferences,
+        onboardingComplete,
         completeQuest,
+        setQuestProgress,
         addQuest,
         removeQuest,
         toggleRestDay,
         completeRaid,
         scheduleReminders,
+        updateNotificationPreferences,
+        completeOnboarding,
         resetPenaltyForDemo,
       }}
     >

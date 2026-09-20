@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { useClerk } from '@clerk/expo';
+import { useSupabaseAuth } from '@/context/SupabaseAuthProvider';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
@@ -10,17 +10,28 @@ import { useColors } from '@/hooks/useColors';
 export default function SettingsScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { signOut } = useClerk();
-  const { restDays, toggleRestDay, scheduleReminders, resetPenaltyForDemo } = useQuestContext();
-  const [reminders, setReminders] = useState(false);
+  const { signOut } = useSupabaseAuth();
+  const { restDays, toggleRestDay, notificationPreferences, updateNotificationPreferences, resetPenaltyForDemo } = useQuestContext();
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
-  const toggleReminders = async (value: boolean) => {
-    if (value) {
-      const enabled = await scheduleReminders();
-      setReminders(enabled);
-      if (!enabled) Alert.alert('Notifications are off', 'Allow notifications in your device settings to enable the two daily nudges.');
-    } else {
-      setReminders(false);
+  const handleSignOut = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    try {
+      await signOut();
+      router.replace('/(auth)/sign-in');
+    } catch (error) {
+      console.error('Sign out error:', error);
+      router.replace('/(auth)/sign-in');
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
+
+  const updateNotifications = async (updates: Parameters<typeof updateNotificationPreferences>[0]) => {
+    const enabled = await updateNotificationPreferences(updates);
+    if (!enabled) {
+      Alert.alert('Notifications unavailable', 'Background notifications are available on iOS and Android. On a device, allow notification permission to activate these System alerts.');
     }
   };
 
@@ -36,7 +47,25 @@ export default function SettingsScreen() {
         <View style={styles.row}>
           <View style={[styles.settingIcon, { backgroundColor: colors.accent }]}><Feather name="bell" size={17} color={colors.primary} /></View>
           <View style={styles.copy}><Text style={[styles.settingTitle, { color: colors.foreground }]}>Daily reminders</Text><Text style={[styles.settingDetail, { color: colors.mutedForeground }]}>Morning kickoff at 07:30 · deadline warning at 21:00</Text></View>
-          <Switch value={reminders} onValueChange={toggleReminders} trackColor={{ false: colors.muted, true: colors.primary }} thumbColor={colors.foreground} />
+          <Switch value={notificationPreferences.dailyReminders} onValueChange={(value) => void updateNotifications({ dailyReminders: value })} trackColor={{ false: colors.muted, true: colors.primary }} thumbColor={colors.foreground} />
+        </View>
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+        <View style={styles.row}>
+          <View style={[styles.settingIcon, { backgroundColor: colors.accent }]}><Feather name="activity" size={17} color={colors.primary} /></View>
+          <View style={styles.copy}><Text style={[styles.settingTitle, { color: colors.foreground }]}>Streak at risk</Text><Text style={[styles.settingDetail, { color: colors.mutedForeground }]}>System warning at 22:00 before the daily evaluation closes</Text></View>
+          <Switch value={notificationPreferences.streakWarnings} onValueChange={(value) => void updateNotifications({ streakWarnings: value })} trackColor={{ false: colors.muted, true: colors.primary }} thumbColor={colors.foreground} />
+        </View>
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+        <View style={styles.row}>
+          <View style={[styles.settingIcon, { backgroundColor: colors.accent }]}><Feather name="zap" size={17} color={colors.primary} /></View>
+          <View style={styles.copy}><Text style={[styles.settingTitle, { color: colors.foreground }]}>Raid gate alerts</Text><Text style={[styles.settingDetail, { color: colors.mutedForeground }]}>Weekly Gate opens notification every Monday at 08:00</Text></View>
+          <Switch value={notificationPreferences.raidAlerts} onValueChange={(value) => void updateNotifications({ raidAlerts: value })} trackColor={{ false: colors.muted, true: colors.primary }} thumbColor={colors.foreground} />
+        </View>
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+        <View style={styles.row}>
+          <View style={[styles.settingIcon, { backgroundColor: colors.accent }]}><Feather name="shield" size={17} color={colors.primary} /></View>
+          <View style={styles.copy}><Text style={[styles.settingTitle, { color: colors.foreground }]}>Lockdown alerts</Text><Text style={[styles.settingDetail, { color: colors.mutedForeground }]}>Immediate System notice when the failure protocol activates</Text></View>
+          <Switch value={notificationPreferences.lockdownAlerts} onValueChange={(value) => void updateNotifications({ lockdownAlerts: value })} trackColor={{ false: colors.muted, true: colors.primary }} thumbColor={colors.foreground} />
         </View>
       </View>
 
@@ -68,9 +97,15 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.section}>
-        <Pressable onPress={() => void signOut(() => router.replace('/(auth)/sign-in'))} style={[styles.signOut, { borderColor: colors.border }]}>
+        <Pressable
+          onPress={handleSignOut}
+          disabled={isSigningOut}
+          style={[styles.signOut, { borderColor: colors.border }, isSigningOut && { opacity: 0.5 }]}
+        >
           <Feather name="log-out" size={17} color={colors.mutedForeground} />
-          <Text style={[styles.signOutText, { color: colors.mutedForeground }]}>SIGN OUT</Text>
+          <Text style={[styles.signOutText, { color: colors.mutedForeground }]}>
+            {isSigningOut ? 'SIGNING OUT...' : 'SIGN OUT'}
+          </Text>
         </Pressable>
       </View>
     </Screen>
@@ -80,6 +115,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   card: { borderWidth: 1, borderRadius: 17, padding: 14 },
   row: { flexDirection: 'row', alignItems: 'center' },
+  divider: { height: StyleSheet.hairlineWidth, marginVertical: 14 },
   settingIcon: { width: 37, height: 37, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 11 },
   copy: { flex: 1 },
   settingTitle: { fontSize: 13, fontWeight: '700' },

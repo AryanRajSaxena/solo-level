@@ -1,6 +1,7 @@
 import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Screen, SectionHeader } from '@/components/Screen';
 import { useColors } from '@/hooks/useColors';
 import { useQuestContext } from '@/context/QuestContext';
@@ -14,6 +15,7 @@ const statMeta = [
 
 export default function ProfileScreen() {
   const colors = useColors();
+  const router = useRouter();
   const { profile } = useQuestContext();
   return (
     <Screen>
@@ -56,6 +58,16 @@ export default function ProfileScreen() {
         <View style={{ flex: 1 }}><Text style={[styles.titleCardLabel, { color: colors.mutedForeground }]}>EQUIPPED TITLE</Text><Text style={[styles.titleCardValue, { color: colors.foreground }]}>{profile.title}</Text></View>
         <Text style={[styles.titleCardTag, { color: colors.primary }]}>RARE</Text>
       </View>
+      <Pressable onPress={() => router.push('/history')} style={[styles.historyButton, { borderColor: colors.border, backgroundColor: colors.card }]}>
+        <Feather name="archive" size={17} color={colors.primary} />
+        <Text style={[styles.historyText, { color: colors.foreground }]}>VIEW QUEST ACTIVITY</Text>
+        <Feather name="chevron-right" size={17} color={colors.mutedForeground} />
+      </Pressable>
+      <Pressable onPress={() => router.push({ pathname: '/onboarding', params: { replay: 'true' } })} style={[styles.historyButton, { borderColor: '#c9a22740', backgroundColor: colors.card, marginTop: 10 }]}>
+        <Feather name="zap" size={17} color="#c9a227" />
+        <Text style={[styles.historyText, { color: colors.foreground }]}>REPLAY AWAKENING SEQUENCE</Text>
+        <Feather name="chevron-right" size={17} color={colors.mutedForeground} />
+      </Pressable>
     </Screen>
   );
 }
@@ -90,4 +102,6 @@ const styles = StyleSheet.create({
   titleCardLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
   titleCardValue: { fontSize: 14, fontWeight: '800', marginTop: 5 },
   titleCardTag: { fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
+  historyButton: { height: 52, borderWidth: 1, borderRadius: 17, marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 14 },
+  historyText: { flex: 1, fontSize: 10, fontWeight: '800', letterSpacing: 1.1 },
 });

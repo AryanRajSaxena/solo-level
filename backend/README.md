@@ -8,7 +8,7 @@ Run it from the repository root:
 uv run uvicorn backend.solo_leveling_api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-The API expects a Clerk bearer token on protected routes. Clerk validation belongs at the edge adapter; the app routes only receive an authenticated subject.
+The API expects a Supabase access token in the `Authorization: Bearer <token>` header on protected routes. It validates the token with the configured Supabase project's Auth service, so its signing-key configuration remains the source of truth.
 
 ## Progression and raid rules
 

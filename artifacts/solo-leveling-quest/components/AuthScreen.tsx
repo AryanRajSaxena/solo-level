@@ -1,4 +1,4 @@
-import { useSignIn, useSignUp } from '@clerk/expo';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { Link, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -13,7 +13,6 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
   const isSignUp = mode === 'sign-up';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [code, setCode] = useState('');
   const [message, setMessage] = useState('');
 
   return isSignUp ? (
@@ -22,11 +21,9 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
       insetsTop={insets.top}
       email={email}
       password={password}
-      code={code}
       message={message}
       setEmail={setEmail}
       setPassword={setPassword}
-      setCode={setCode}
       setMessage={setMessage}
     />
   ) : (
@@ -35,11 +32,9 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
       insetsTop={insets.top}
       email={email}
       password={password}
-      code={code}
       message={message}
       setEmail={setEmail}
       setPassword={setPassword}
-      setCode={setCode}
       setMessage={setMessage}
     />
   );
@@ -50,11 +45,9 @@ type AuthViewProps = {
   insetsTop: number;
   email: string;
   password: string;
-  code: string;
   message: string;
   setEmail: (value: string) => void;
   setPassword: (value: string) => void;
-  setCode: (value: string) => void;
   setMessage: (value: string) => void;
 };
 
@@ -129,56 +122,43 @@ function PrimaryButton({ label, onPress, disabled, colors }: { label: string; on
 }
 
 function SignInView(props: AuthViewProps) {
-  const { signIn, errors, fetchStatus } = useSignIn();
   const router = useRouter();
-  const [needsCode, setNeedsCode] = useState(false);
-  const isLoading = fetchStatus === 'fetching';
-  const errorText = errors?.fields?.identifier?.message || errors?.fields?.password?.message || props.message;
+  const [isLoading, setIsLoading] = useState(false);
 
   const submit = async () => {
     props.setMessage('');
-    const result = await signIn.password({ emailAddress: props.email, password: props.password });
-    if (result.error) {
-      props.setMessage(result.error.message ?? 'Unable to sign in. Check your credentials.');
+    if (!isSupabaseConfigured) {
+      props.setMessage('SYSTEM NOTICE: Supabase keys are not configured yet. Please update .env with your project URL and Anon Key.');
       return;
     }
-    if (signIn.status === 'complete') {
-      await signIn.finalize({ navigate: () => router.replace('/(tabs)') });
-    } else if (signIn.status === 'needs_client_trust') {
-      await signIn.mfa.sendEmailCode();
-      setNeedsCode(true);
-    } else if (signIn.status === 'needs_second_factor') {
-      props.setMessage('A second factor is required for this account.');
-    }
-  };
-
-  const verify = async () => {
-    await signIn.mfa.verifyEmailCode({ code: props.code });
-    if (signIn.status === 'complete') {
-      await signIn.finalize({ navigate: () => router.replace('/(tabs)') });
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: props.email,
+        password: props.password,
+      });
+      if (error) {
+        props.setMessage(error.message ?? 'Unable to sign in. Check your credentials.');
+      } else {
+        router.replace('/(tabs)');
+      }
+    } catch {
+      props.setMessage('An unexpected error occurred. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <AuthFrame {...props} title="Enter the system" subtitle="Your quests, stats, and streak are waiting.">
-      {needsCode ? (
-        <>
-          <Text style={[styles.verifyTitle, { color: props.colors.foreground }]}>Verify your hunter</Text>
-          <Field label="EMAIL CODE" value={props.code} onChangeText={props.setCode} placeholder="123456" colors={props.colors} keyboardType="numeric" />
-          <PrimaryButton label={isLoading ? 'VERIFYING...' : 'VERIFY CODE'} onPress={() => void verify()} disabled={!props.code || isLoading} colors={props.colors} />
-        </>
-      ) : (
-        <>
-          <Field label="EMAIL ADDRESS" value={props.email} onChangeText={props.setEmail} placeholder="you@example.com" colors={props.colors} keyboardType="email-address" />
-          <Field label="PASSWORD" value={props.password} onChangeText={props.setPassword} placeholder="Enter your password" colors={props.colors} secureTextEntry />
-          <PrimaryButton label={isLoading ? 'LOADING...' : 'SIGN IN'} onPress={() => void submit()} disabled={!props.email || !props.password || isLoading} colors={props.colors} />
-        </>
-      )}
-      {errorText ? <Text style={[styles.error, { color: props.colors.destructive }]}>{errorText}</Text> : null}
+      <Field label="EMAIL ADDRESS" value={props.email} onChangeText={props.setEmail} placeholder="you@example.com" colors={props.colors} keyboardType="email-address" />
+      <Field label="PASSWORD" value={props.password} onChangeText={props.setPassword} placeholder="Enter your password" colors={props.colors} secureTextEntry />
+      <PrimaryButton label={isLoading ? 'LOADING...' : 'SIGN IN'} onPress={() => void submit()} disabled={!props.email || !props.password || isLoading} colors={props.colors} />
+      {props.message ? <Text style={[styles.error, { color: props.colors.destructive }]}>{props.message}</Text> : null}
       <View style={styles.authLinkRow}>
         <Text style={[styles.linkPrompt, { color: props.colors.mutedForeground }]}>New hunter?</Text>
-        <Link href="/(auth)/sign-up" asChild>
-          <Pressable><Text style={[styles.link, { color: props.colors.primary }]}>Create an account</Text></Pressable>
+        <Link href="/(auth)/sign-up" style={[styles.link, { color: props.colors.primary }]}>
+          Create an account
         </Link>
       </View>
     </AuthFrame>
@@ -186,60 +166,74 @@ function SignInView(props: AuthViewProps) {
 }
 
 function SignUpView(props: AuthViewProps) {
-  const { signUp, errors, fetchStatus } = useSignUp();
   const router = useRouter();
-  const [needsCode, setNeedsCode] = useState(false);
-  const isLoading = fetchStatus === 'fetching';
-  const errorText = errors?.fields?.emailAddress?.message || errors?.fields?.password?.message || errors?.fields?.code?.message || props.message;
+  const [isLoading, setIsLoading] = useState(false);
+  const [confirmationSent, setConfirmationSent] = useState(false);
 
   const submit = async () => {
     props.setMessage('');
-    const result = await signUp.password({ emailAddress: props.email, password: props.password });
-    if (result.error) {
-      props.setMessage(result.error.message ?? 'Unable to create your account.');
+    if (!isSupabaseConfigured) {
+      props.setMessage('SYSTEM NOTICE: Supabase keys are not configured yet. Please update .env with your project URL and Anon Key.');
       return;
     }
-    await signUp.verifications.sendEmailCode();
-    setNeedsCode(true);
-  };
-
-  const verify = async () => {
-    const result = await signUp.verifications.verifyEmailCode({ code: props.code });
-    if (result.error) {
-      props.setMessage(result.error.message ?? 'That code was not accepted.');
-      return;
-    }
-    if (signUp.status === 'complete') {
-      await signUp.finalize({ navigate: () => router.replace('/(tabs)') });
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: props.email,
+        password: props.password,
+      });
+      if (error) {
+        props.setMessage(error.message ?? 'Unable to create your account.');
+      } else if (data.session) {
+        // Auto-confirmed — navigate directly
+        router.replace('/(tabs)');
+      } else {
+        // Email confirmation required
+        setConfirmationSent(true);
+        props.setMessage('Check your email for a confirmation link to complete your awakening.');
+      }
+    } catch {
+      props.setMessage('An unexpected error occurred. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <AuthFrame {...props} title={needsCode ? 'Confirm your awakening' : 'Begin your awakening'} subtitle={needsCode ? 'Enter the code sent to your email.' : 'Create an account to keep your progress across devices.'}>
-      {needsCode ? (
+    <AuthFrame
+      {...props}
+      title={confirmationSent ? 'Confirm your awakening' : 'Begin your awakening'}
+      subtitle={confirmationSent ? 'A verification link has been sent to your email.' : 'Create an account to keep your progress across devices.'}
+    >
+      {confirmationSent ? (
         <>
-          <Text style={[styles.verifyTitle, { color: props.colors.foreground }]}>Email verification</Text>
-          <Field label="VERIFICATION CODE" value={props.code} onChangeText={props.setCode} placeholder="123456" colors={props.colors} keyboardType="numeric" />
-          <PrimaryButton label={isLoading ? 'VERIFYING...' : 'VERIFY CODE'} onPress={() => void verify()} disabled={!props.code || isLoading} colors={props.colors} />
-          <Pressable onPress={() => void signUp.verifications.sendEmailCode()} style={styles.resend}>
-            <Text style={[styles.link, { color: props.colors.primary }]}>Send a new code</Text>
+          <Text style={[styles.verifyTitle, { color: props.colors.foreground }]}>Verification sent</Text>
+          <Text style={[styles.verifyDetail, { color: props.colors.mutedForeground }]}>
+            Open the confirmation link in your email, then return here and sign in.
+          </Text>
+          <Pressable
+            onPress={() => router.replace('/(auth)/sign-in')}
+            style={[styles.primaryButton, { backgroundColor: props.colors.primary, marginTop: 16 }]}
+          >
+            <Text style={[styles.primaryButtonText, { color: props.colors.primaryForeground }]}>GO TO SIGN IN</Text>
           </Pressable>
         </>
       ) : (
         <>
           <Field label="EMAIL ADDRESS" value={props.email} onChangeText={props.setEmail} placeholder="you@example.com" colors={props.colors} keyboardType="email-address" />
-          <Field label="PASSWORD" value={props.password} onChangeText={props.setPassword} placeholder="At least 8 characters" colors={props.colors} secureTextEntry />
+          <Field label="PASSWORD" value={props.password} onChangeText={props.setPassword} placeholder="At least 6 characters" colors={props.colors} secureTextEntry />
           <PrimaryButton label={isLoading ? 'CREATING...' : 'CREATE ACCOUNT'} onPress={() => void submit()} disabled={!props.email || !props.password || isLoading} colors={props.colors} />
-          <View nativeID="clerk-captcha" />
         </>
       )}
-      {errorText ? <Text style={[styles.error, { color: props.colors.destructive }]}>{errorText}</Text> : null}
-      <View style={styles.authLinkRow}>
-        <Text style={[styles.linkPrompt, { color: props.colors.mutedForeground }]}>Already awakened?</Text>
-        <Link href="/(auth)/sign-in" asChild>
-          <Pressable><Text style={[styles.link, { color: props.colors.primary }]}>Sign in</Text></Pressable>
-        </Link>
-      </View>
+      {props.message && !confirmationSent ? <Text style={[styles.error, { color: props.colors.destructive }]}>{props.message}</Text> : null}
+      {!confirmationSent && (
+        <View style={styles.authLinkRow}>
+          <Text style={[styles.linkPrompt, { color: props.colors.mutedForeground }]}>Already awakened?</Text>
+          <Link href="/(auth)/sign-in" style={[styles.link, { color: props.colors.primary }]}>
+            Sign in
+          </Link>
+        </View>
+      )}
     </AuthFrame>
   );
 }
@@ -265,6 +259,7 @@ const styles = StyleSheet.create({
   authLinkRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 22 },
   linkPrompt: { fontSize: 13 },
   link: { fontSize: 13, fontWeight: '700' },
-  verifyTitle: { fontSize: 18, fontWeight: '700', marginBottom: 18 },
+  verifyTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12 },
+  verifyDetail: { fontSize: 14, lineHeight: 21 },
   resend: { alignItems: 'center', marginTop: 16 },
 });

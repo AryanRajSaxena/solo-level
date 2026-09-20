@@ -30,7 +30,7 @@ A dark anime-inspired daily quest RPG that turns workouts, coding, and personal 
 ## Architecture decisions
 
 - The mobile client is offline-first so quest completion remains usable without a network connection.
-- Clerk owns accounts and sessions; the Python service accepts Clerk bearer tokens at its protected boundary.
+- Supabase owns accounts and sessions; the Python service validates Supabase JWTs and persists state in Supabase PostgreSQL.
 - Native social-app blocking is intentionally not claimed in the first build. The penalty is an in-app 24-hour lockdown with streak reset and XP loss.
 - Progression uses an increasing linear XP curve: level 1 requires 1,000 XP and each next level adds 100 XP to the requirement. Rank thresholds are D8, C15, B25, A35, and S50.
 - Quests grant XP plus one point to their primary stat only. Rest days are excluded from streak and raid requirements rather than counted as completed days.

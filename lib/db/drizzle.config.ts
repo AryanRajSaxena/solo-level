@@ -1,14 +1,26 @@
 import { defineConfig } from "drizzle-kit";
 import path from "path";
+import fs from "fs";
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL, ensure the database is provisioned");
+const envPath = path.resolve(__dirname, "../../.env");
+if (fs.existsSync(envPath) && typeof process.loadEnvFile === "function") {
+  try {
+    process.loadEnvFile(envPath);
+  } catch {
+    // ignore
+  }
 }
 
+const databaseUrl =
+  process.env.DATABASE_URL && !process.env.DATABASE_URL.includes("YOUR_PROJECT_REF")
+    ? process.env.DATABASE_URL
+    : "postgresql://postgres:postgres@localhost:5432/postgres";
+
 export default defineConfig({
-  schema: path.join(__dirname, "./src/schema/index.ts"),
+  schema: "./src/schema/index.ts",
+  out: "./migrations",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL,
+    url: databaseUrl,
   },
 });

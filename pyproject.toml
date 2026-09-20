@@ -7,4 +7,5 @@ dependencies = [
     "fastapi>=0.141.1",
     "python-jose[cryptography]>=3.5.0",
     "uvicorn>=0.53.0",
+    "supabase>=2.15.0",
 ]

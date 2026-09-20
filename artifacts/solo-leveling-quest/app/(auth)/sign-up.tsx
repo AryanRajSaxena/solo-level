@@ -1,10 +1,10 @@
 import React from 'react';
 import { Redirect } from 'expo-router';
-import { useAuth } from '@clerk/expo';
+import { useSupabaseAuth } from '@/context/SupabaseAuthProvider';
 import { AuthScreen } from '@/components/AuthScreen';
 
 export default function SignUpScreen() {
-  const { isSignedIn } = useAuth();
+  const { isSignedIn } = useSupabaseAuth();
   if (isSignedIn) return <Redirect href="/(tabs)" />;
   return <AuthScreen mode="sign-up" />;
 }
