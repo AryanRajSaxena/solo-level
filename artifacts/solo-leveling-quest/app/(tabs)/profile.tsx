@@ -13,16 +13,27 @@ const statMeta = [
   { key: 'DISCIPLINE' as const, label: 'Discipline', icon: 'target' as const, color: '#b693ff' },
 ];
 
+const RANK_COLORS: Record<string, string> = {
+  S: '#ffd700',
+  A: '#c084fc',
+  B: '#00e5ff',
+  C: '#4ade80',
+  D: '#fb923c',
+  E: '#94a3b8',
+};
+
 export default function ProfileScreen() {
   const colors = useColors();
   const router = useRouter();
   const { profile } = useQuestContext();
+  const rankColor = RANK_COLORS[profile.rank] ?? colors.primary;
+
   return (
     <Screen>
-      <SectionHeader eyebrow="HUNTER PROFILE" title="Your awakening" />
-      <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-          <Feather name="user" size={28} color={colors.primaryForeground} />
+      <SectionHeader eyebrow="[SYSTEM // HUNTER STATUS]" title="Your Awakening" />
+      <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: 'rgba(101, 217, 255, 0.25)' }]}>
+        <View style={[styles.avatar, { backgroundColor: rankColor, shadowColor: rankColor }]}>
+          <Feather name="user" size={28} color="#07111c" />
         </View>
         <Text style={[styles.name, { color: colors.foreground }]}>{profile.name}</Text>
         <Text style={[styles.title, { color: colors.primary }]}>{profile.title}</Text>
@@ -33,11 +44,20 @@ export default function ProfileScreen() {
           </View>
         ) : null}
         <View style={styles.rankRow}>
-          <View style={styles.rankBlock}><Text style={[styles.rank, { color: colors.primary }]}>{profile.rank}</Text><Text style={[styles.label, { color: colors.mutedForeground }]}>RANK</Text></View>
+          <View style={styles.rankBlock}>
+            <Text style={[styles.rank, { color: rankColor }]}>{profile.rank}</Text>
+            <Text style={[styles.label, { color: colors.mutedForeground }]}>RANK</Text>
+          </View>
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
-          <View style={styles.metric}><Text style={[styles.metricValue, { color: colors.foreground }]}>{profile.level}</Text><Text style={[styles.label, { color: colors.mutedForeground }]}>LEVEL</Text></View>
+          <View style={styles.metric}>
+            <Text style={[styles.metricValue, { color: colors.foreground }]}>{profile.level}</Text>
+            <Text style={[styles.label, { color: colors.mutedForeground }]}>LEVEL</Text>
+          </View>
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
-          <View style={styles.metric}><Text style={[styles.metricValue, { color: colors.foreground }]}>{profile.longestStreak}</Text><Text style={[styles.label, { color: colors.mutedForeground }]}>BEST STREAK</Text></View>
+          <View style={styles.metric}>
+            <Text style={[styles.metricValue, { color: colors.foreground }]}>{profile.longestStreak}</Text>
+            <Text style={[styles.label, { color: colors.mutedForeground }]}>BEST STREAK</Text>
+          </View>
         </View>
       </View>
 

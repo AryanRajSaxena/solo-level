@@ -1,10 +1,20 @@
+
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, Platform } from 'react-native';
 import { Screen, SectionHeader, IconButton } from '@/components/Screen';
 import { useColors } from '@/hooks/useColors';
 import { useQuestContext, Quest } from '@/context/QuestContext';
+
+const RANK_COLORS: Record<string, string> = {
+  S: '#ffd700',
+  A: '#c084fc',
+  B: '#00e5ff',
+  C: '#4ade80',
+  D: '#fb923c',
+  E: '#94a3b8',
+};
 
 function QuestRow({
   quest,
@@ -44,13 +54,21 @@ function QuestRow({
       style={({ pressed }) => [
         styles.questRow,
         {
-          backgroundColor: colors.card,
-          borderColor: completed ? colors.primary : (isSensorQuest ? colors.primary : colors.border),
+          backgroundColor: completed ? 'rgba(17, 24, 39, 0.6)' : colors.card,
+          borderColor: completed ? 'rgba(101, 217, 255, 0.4)' : isSensorQuest ? 'rgba(0, 229, 255, 0.35)' : colors.border,
         },
         pressed && styles.pressed,
       ]}
     >
-      <View style={[styles.questIcon, { backgroundColor: `${categoryColor}20` }]}>
+      <View
+        style={[
+          styles.questIcon,
+          {
+            backgroundColor: completed ? 'rgba(101, 217, 255, 0.12)' : `${categoryColor}18`,
+            borderColor: completed ? colors.primary : `${categoryColor}40`,
+          },
+        ]}
+      >
         <Feather
           name={
             completed
@@ -64,25 +82,36 @@ function QuestRow({
               : 'activity'
           }
           size={18}
-          color={completed ? colors.primary : (isSensorQuest ? colors.primary : categoryColor)}
+          color={completed ? colors.primary : isSensorQuest ? colors.primary : categoryColor}
         />
       </View>
+
       <View style={styles.questCopy}>
-        <Text style={[styles.questTitle, { color: colors.foreground }, completed && styles.completedText]}>{quest.title}</Text>
-        <Text style={[styles.questDetail, { color: isSensorQuest && !completed ? colors.primary : colors.mutedForeground }]}>
+        <View style={styles.questHeaderRow}>
+          <Text style={[styles.questTitle, { color: colors.foreground }, completed && styles.completedText]}>
+            {quest.title}
+          </Text>
+          {isSensorQuest && !completed && (
+            <View style={styles.sensorBadge}>
+              <Text style={styles.sensorBadgeText}>{isWalkQuest ? 'GPS' : 'AI VISION'}</Text>
+            </View>
+          )}
+        </View>
+        <Text style={[styles.questDetail, { color: isSensorQuest && !completed ? '#65d9ff' : colors.mutedForeground }]}>
           {isWalkQuest && !completed
-            ? '🛰️ 3.00 KM · Start sensor trial'
+            ? '🛰️ 3.00 KM · Start mobile sensor'
             : isPoseQuest && !completed
-            ? `👁️ AI CAMERA · Track ${quest.target} ${quest.unit}`
+            ? `👁️ AI CAMERA · Verify ${quest.target} ${quest.unit}`
             : `${quest.detail} · +${quest.xp} XP`}
         </Text>
       </View>
+
       <View
         style={[
           styles.questCheck,
           {
-            borderColor: completed ? colors.primary : (isSensorQuest ? colors.primary : colors.border),
-            backgroundColor: completed ? colors.primary : 'transparent',
+            borderColor: completed ? colors.primary : isSensorQuest ? colors.primary : colors.border,
+            backgroundColor: completed ? colors.primary : 'rgba(0, 229, 255, 0.05)',
           },
         ]}
       >
@@ -103,28 +132,48 @@ export default function HomeScreen() {
   const router = useRouter();
   const { profile, activeQuests, completedCount, completionPercent, todayLabel, completeQuest, isLockedDown } = useQuestContext();
   const nextQuest = activeQuests.find((quest) => quest.completedOn === null);
+  const rankColor = RANK_COLORS[profile.rank] ?? colors.primary;
 
   return (
     <Screen>
       <View style={styles.topBar}>
         <View>
-          <Text style={[styles.systemLine, { color: colors.primary }]}>SYSTEM ONLINE</Text>
-          <Text style={[styles.greeting, { color: colors.foreground }]}>Good evening, hunter.</Text>
+          <View style={styles.systemTagRow}>
+            <View style={styles.beacon} />
+            <Text style={[styles.systemLine, { color: colors.primary }]}>SYSTEM ONLINE // PROTOCOL V2</Text>
+          </View>
+          <Text style={[styles.greeting, { color: colors.foreground }]}>Good evening, Hunter.</Text>
         </View>
         <IconButton icon="settings" label="Open settings" onPress={() => router.push('/(tabs)/settings')} />
       </View>
 
-      <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={styles.heroTop}>
-          <View>
-            <Text style={[styles.rankLabel, { color: colors.mutedForeground }]}>CURRENT RANK</Text>
-            <Text style={[styles.rank, { color: colors.primary }]}>{profile.rank}</Text>
+      {/* SOLO LEVELING HUNTER STATUS CARD */}
+      <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: 'rgba(101, 217, 255, 0.25)' }]}>
+        <View style={styles.heroHeaderTag}>
+          <Text style={styles.heroHeaderTagText}>[ HUNTER STATUS WINDOW ]</Text>
+          <View style={[styles.rankTag, { borderColor: rankColor, backgroundColor: `${rankColor}15` }]}>
+            <Text style={[styles.rankTagText, { color: rankColor }]}>{profile.rank}-RANK</Text>
           </View>
+        </View>
+
+        <View style={styles.heroTop}>
+          <View style={styles.rankContainer}>
+            <Text style={[styles.rank, { color: rankColor }]}>{profile.rank}</Text>
+            <View>
+              <Text style={[styles.rankLabel, { color: colors.mutedForeground }]}>CURRENT RANK</Text>
+              <Text style={[styles.awakeningState, { color: rankColor }]}>Awakened Hunter</Text>
+            </View>
+          </View>
+
           <View style={styles.levelBlock}>
-            <Text style={[styles.levelNumber, { color: colors.foreground }]}>LVL {profile.level}</Text>
+            <View style={styles.levelBadge}>
+              <Text style={styles.levelNumber}>LVL {profile.level}</Text>
+            </View>
             <Text style={[styles.titleText, { color: colors.mutedForeground }]}>{profile.title}</Text>
           </View>
         </View>
+
+        {/* XP PROGRESS BAR */}
         <View style={styles.xpLine}>
           <Text style={[styles.xpText, { color: colors.foreground }]}>{profile.xp} XP</Text>
           <Text style={[styles.xpGoal, { color: colors.mutedForeground }]}>{profile.xpToNext} XP TO NEXT LEVEL</Text>
@@ -132,6 +181,28 @@ export default function HomeScreen() {
         <View style={[styles.progressTrack, { backgroundColor: colors.muted }]}>
           <View style={[styles.progressFill, { backgroundColor: colors.primary, width: `${Math.min(100, (profile.xp / profile.xpToNext) * 100)}%` }]} />
         </View>
+
+        {/* STAT PILLS ROW */}
+        <View style={styles.statPillsRow}>
+          <View style={styles.statPill}>
+            <Text style={styles.statPillKey}>STR</Text>
+            <Text style={[styles.statPillVal, { color: '#ffb25c' }]}>{profile.stats.STR}</Text>
+          </View>
+          <View style={styles.statPill}>
+            <Text style={styles.statPillKey}>INT</Text>
+            <Text style={[styles.statPillVal, { color: '#65d9ff' }]}>{profile.stats.INT}</Text>
+          </View>
+          <View style={styles.statPill}>
+            <Text style={styles.statPillKey}>STM</Text>
+            <Text style={[styles.statPillVal, { color: '#75e2b6' }]}>{profile.stats.STAMINA}</Text>
+          </View>
+          <View style={styles.statPill}>
+            <Text style={styles.statPillKey}>DISC</Text>
+            <Text style={[styles.statPillVal, { color: '#b693ff' }]}>{profile.stats.DISCIPLINE}</Text>
+          </View>
+        </View>
+
+        {/* FOOTER */}
         <View style={styles.heroFooter}>
           <View style={styles.streak}>
             <Feather name="zap" size={15} color="#ffb25c" />
@@ -146,12 +217,13 @@ export default function HomeScreen() {
           <Feather name="lock" size={18} color={colors.destructive} />
           <View style={{ flex: 1 }}>
             <Text style={[styles.lockdownTitle, { color: colors.foreground }]}>LOCKDOWN ACTIVE</Text>
-            <Text style={[styles.lockdownCopy, { color: colors.mutedForeground }]}>Your social portals are sealed for 24 hours. Return to the system settings to review the penalty.</Text>
+            <Text style={[styles.lockdownCopy, { color: colors.mutedForeground }]}>Your social portals are sealed for 24 hours. Return to system settings to review the penalty.</Text>
           </View>
           <Feather name="chevron-right" size={18} color={colors.destructive} />
         </Pressable>
       ) : null}
 
+      {/* DAILY QUESTS SECTION */}
       <View style={styles.sectionSpacing}>
         <SectionHeader eyebrow="DAILY PROTOCOL" title="Today’s quests" action="View all" onAction={() => router.push('/(tabs)/quests')} />
         <View style={styles.progressSummary}>
@@ -189,6 +261,7 @@ export default function HomeScreen() {
         ) : null}
       </View>
 
+      {/* NEXT OBJECTIVE CARD */}
       {nextQuest ? (
         <Pressable
           onPress={() => {
@@ -208,7 +281,7 @@ export default function HomeScreen() {
           }}
           style={({ pressed }) => [
             styles.nextCard,
-            { borderColor: colors.border, backgroundColor: colors.accent },
+            { borderColor: 'rgba(101, 217, 255, 0.3)', backgroundColor: colors.accent },
             pressed && styles.pressed,
           ]}
         >
@@ -229,7 +302,7 @@ export default function HomeScreen() {
             <Text style={[styles.nextLabel, { color: colors.primary }]}>NEXT OBJECTIVE</Text>
             <Text style={[styles.nextTitle, { color: colors.foreground }]}>{nextQuest.title}</Text>
           </View>
-          <Text style={[styles.nextXp, { color: colors.foreground }]}>+{nextQuest.xp}</Text>
+          <Text style={[styles.nextXp, { color: colors.foreground }]}>+{nextQuest.xp} XP</Text>
         </Pressable>
       ) : null}
     </Screen>
@@ -237,49 +310,353 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 },
-  systemLine: { fontSize: 10, fontWeight: '800', letterSpacing: 1.8, marginBottom: 7 },
-  greeting: { fontSize: 23, fontWeight: '700', letterSpacing: -0.5 },
-  heroCard: { borderWidth: 1, borderRadius: 22, padding: 18 },
-  heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  rankLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 1.7 },
-  rank: { fontSize: 52, lineHeight: 58, fontWeight: '800', letterSpacing: -2 },
-  levelBlock: { alignItems: 'flex-end', paddingTop: 2 },
-  levelNumber: { fontSize: 15, fontWeight: '800', letterSpacing: 0.8 },
-  titleText: { fontSize: 11, marginTop: 5 },
-  xpLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, marginBottom: 8 },
-  xpText: { fontSize: 12, fontWeight: '700' },
-  xpGoal: { fontSize: 9, letterSpacing: 1 },
-  progressTrack: { height: 7, borderRadius: 8, overflow: 'hidden' },
-  progressFill: { height: '100%', borderRadius: 8 },
-  heroFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 15 },
-  streak: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  streakText: { fontSize: 12, fontWeight: '700' },
-  dateText: { fontSize: 11 },
-  lockdown: { flexDirection: 'row', alignItems: 'center', gap: 11, borderWidth: 1, borderRadius: 16, padding: 13, marginTop: 14 },
-  lockdownTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
-  lockdownCopy: { fontSize: 11, lineHeight: 16, marginTop: 3 },
-  sectionSpacing: { marginTop: 29 },
-  progressSummary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 13 },
-  summaryNumber: { fontSize: 25, fontWeight: '800' },
-  summaryTotal: { fontSize: 16, fontWeight: '500' },
-  summaryLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 1.3, marginTop: 3 },
-  summaryBarWrap: { width: '56%', alignItems: 'flex-end' },
-  summaryPercent: { fontSize: 10, fontWeight: '800', letterSpacing: 1.1, marginTop: 6 },
-  questRow: { minHeight: 72, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 16, padding: 12, marginBottom: 9 },
-  questIcon: { width: 39, height: 39, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  questCopy: { flex: 1 },
-  questTitle: { fontSize: 14, fontWeight: '700' },
-  questDetail: { fontSize: 11, marginTop: 5 },
-  questCheck: { width: 25, height: 25, borderRadius: 8, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', marginLeft: 10 },
-  completedText: { textDecorationLine: 'line-through', opacity: 0.65 },
-  nextCard: { flexDirection: 'row', alignItems: 'center', gap: 11, borderWidth: 1, borderRadius: 17, padding: 13, marginTop: 14 },
-  nextIcon: { width: 33, height: 33, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  nextLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },
-  nextTitle: { fontSize: 14, fontWeight: '700', marginTop: 4 },
-  nextXp: { fontSize: 13, fontWeight: '800' },
-  empty: { borderWidth: 1, borderRadius: 18, padding: 22, alignItems: 'center' },
-  emptyTitle: { fontSize: 17, fontWeight: '700', marginTop: 12 },
-  emptyCopy: { fontSize: 12, textAlign: 'center', lineHeight: 18, marginTop: 6 },
-  pressed: { opacity: 0.75, transform: [{ scale: 0.99 }] },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  systemTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  beacon: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#65d9ff',
+  },
+  systemLine: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+  },
+  greeting: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+  },
+  heroCard: {
+    borderWidth: 1.5,
+    borderRadius: 22,
+    padding: 18,
+    shadowColor: '#65d9ff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.15,
+    shadowRadius: 14,
+  },
+  heroHeaderTag: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  heroHeaderTagText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: 'rgba(255, 255, 255, 0.4)',
+    letterSpacing: 1.5,
+  },
+  rankTag: {
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  rankTagText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  heroTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  rankContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  rankLabel: {
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+  },
+  rank: {
+    fontSize: 54,
+    lineHeight: 58,
+    fontWeight: '900',
+    letterSpacing: -1,
+  },
+  awakeningState: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  levelBlock: {
+    alignItems: 'flex-end',
+  },
+  levelBadge: {
+    backgroundColor: 'rgba(101, 217, 255, 0.15)',
+    borderWidth: 1,
+    borderColor: '#65d9ff',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  levelNumber: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#65d9ff',
+    letterSpacing: 1,
+  },
+  titleText: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 6,
+    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+  },
+  xpLine: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  xpText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  xpGoal: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  progressTrack: {
+    height: 7,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 8,
+  },
+  statPillsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  statPill: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(7, 11, 19, 0.6)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  statPillKey: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.5)',
+    letterSpacing: 1,
+  },
+  statPillVal: {
+    fontSize: 13,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  heroFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 14,
+  },
+  streak: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  streakText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  dateText: {
+    fontSize: 11,
+  },
+  lockdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 13,
+    marginTop: 14,
+  },
+  lockdownTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+  lockdownCopy: {
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 3,
+  },
+  sectionSpacing: {
+    marginTop: 26,
+  },
+  progressSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 13,
+  },
+  summaryNumber: {
+    fontSize: 25,
+    fontWeight: '800',
+  },
+  summaryTotal: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  summaryLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1.3,
+    marginTop: 3,
+  },
+  summaryBarWrap: {
+    width: '56%',
+    alignItems: 'flex-end',
+  },
+  summaryPercent: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+    marginTop: 6,
+  },
+  questRow: {
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 9,
+  },
+  questIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  questCopy: {
+    flex: 1,
+  },
+  questHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  questTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  sensorBadge: {
+    backgroundColor: 'rgba(0, 229, 255, 0.15)',
+    borderWidth: 1,
+    borderColor: '#00e5ff',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  sensorBadgeText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#00e5ff',
+    letterSpacing: 0.5,
+  },
+  questDetail: {
+    fontSize: 11,
+    marginTop: 4,
+  },
+  questCheck: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
+  },
+  completedText: {
+    textDecorationLine: 'line-through',
+    opacity: 0.65,
+  },
+  nextCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    borderWidth: 1.5,
+    borderRadius: 18,
+    padding: 14,
+    marginTop: 14,
+  },
+  nextIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nextLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+  },
+  nextTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 3,
+  },
+  nextXp: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  empty: {
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 22,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    marginTop: 12,
+  },
+  emptyCopy: {
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: 6,
+  },
+  pressed: {
+    opacity: 0.75,
+    transform: [{ scale: 0.99 }],
+  },
 });
+

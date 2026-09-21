@@ -50,22 +50,22 @@ function ClassicTabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.mutedForeground,
+        tabBarActiveTintColor: '#00e5ff',
+        tabBarInactiveTintColor: '#64748b',
         headerShown: false,
         tabBarStyle: {
           position: 'absolute',
-          backgroundColor: isIOS ? 'rgba(7, 11, 19, 0.85)' : colors.background,
+          backgroundColor: 'rgba(7, 11, 19, 0.95)',
           borderTopWidth: 1,
-          borderTopColor: colors.border,
-          elevation: 0,
-          paddingTop: 6,
-          ...(isWeb ? { height: 72, paddingBottom: 14 } : { height: 64, paddingBottom: 8 }),
+          borderTopColor: 'rgba(0, 229, 255, 0.25)',
+          elevation: 8,
+          paddingTop: 8,
+          ...(isWeb ? { height: 68, paddingBottom: 12 } : { height: 62, paddingBottom: 6 }),
         },
         tabBarLabelStyle: {
           fontSize: 10,
-          fontWeight: '700',
-          letterSpacing: 0.5,
+          fontWeight: '800',
+          letterSpacing: 0.8,
         },
         tabBarBackground: () =>
           isIOS ? (
@@ -78,7 +78,7 @@ function ClassicTabLayout() {
             <View
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: colors.background },
+                { backgroundColor: 'rgba(7, 11, 19, 0.95)' },
               ]}
             />
           ),
