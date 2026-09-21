@@ -1,5 +1,7 @@
 import '@/tasks/locationTask';
+import '@/utils/injectWebIcons';
 import React, { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -7,10 +9,6 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { QuestProviderRoot } from '@/context/QuestProviderRoot';
 import { SupabaseAuthProvider } from '@/context/SupabaseAuthProvider';
 import Feather from '@expo/vector-icons/Feather';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -44,11 +42,7 @@ export default function RootLayout() {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
-    ...Feather.font,
-    ...Ionicons.font,
-    ...MaterialCommunityIcons.font,
-    ...MaterialIcons.font,
-    ...FontAwesome.font,
+    ...(Platform.OS === 'web' ? {} : Feather.font),
   });
 
   useEffect(() => {

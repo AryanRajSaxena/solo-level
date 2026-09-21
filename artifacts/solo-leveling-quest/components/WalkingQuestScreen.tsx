@@ -10,7 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 
 import { useWalkingQuest, TARGET_DISTANCE_M } from '../hooks/useWalkingQuest';
 import { metersToKm, formatTime } from '../utils/haversine';
@@ -131,7 +131,7 @@ const MILESTONES = [1000, 2000];
 const CompletionOverlay = ({ elapsedSec, onClose }: { elapsedSec: number; onClose: () => void }) => (
   <Animated.View entering={FadeIn.duration(500)} style={styles.completionOverlay}>
     <View style={styles.completionBadge}>
-      <MaterialCommunityIcons name="trophy-award" size={48} color={C.cyan} />
+      <Feather name="award" size={48} color={C.cyan} />
     </View>
 
     <Text style={styles.completionEyebrow}>SYSTEM // OBJECTIVE COMPLETE</Text>
