@@ -87,22 +87,11 @@ function QuestRow({
       </View>
 
       <View style={styles.questCopy}>
-        <View style={styles.questHeaderRow}>
-          <Text style={[styles.questTitle, { color: colors.foreground }, completed && styles.completedText]}>
-            {quest.title}
-          </Text>
-          {isSensorQuest && !completed && (
-            <View style={styles.sensorBadge}>
-              <Text style={styles.sensorBadgeText}>{isWalkQuest ? 'GPS' : 'AI VISION'}</Text>
-            </View>
-          )}
-        </View>
-        <Text style={[styles.questDetail, { color: isSensorQuest && !completed ? '#65d9ff' : colors.mutedForeground }]}>
-          {isWalkQuest && !completed
-            ? '🛰️ 3.00 KM · Start mobile sensor'
-            : isPoseQuest && !completed
-            ? `👁️ AI CAMERA · Verify ${quest.target} ${quest.unit}`
-            : `${quest.detail} · +${quest.xp} XP`}
+        <Text style={[styles.questTitle, { color: colors.foreground }, completed && styles.completedText]}>
+          {quest.title}
+        </Text>
+        <Text style={[styles.questDetail, { color: colors.mutedForeground }]}>
+          {quest.detail} · +{quest.xp} XP
         </Text>
       </View>
 
@@ -130,7 +119,7 @@ function QuestRow({
 export default function HomeScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { profile, activeQuests, completedCount, completionPercent, todayLabel, completeQuest, isLockedDown } = useQuestContext();
+  const { profile, activeQuests, completedCount, completionPercent, completeQuest, isLockedDown } = useQuestContext();
   const nextQuest = activeQuests.find((quest) => quest.completedOn === null);
   const rankColor = RANK_COLORS[profile.rank] ?? colors.primary;
 
@@ -149,13 +138,6 @@ export default function HomeScreen() {
 
       {/* SOLO LEVELING HUNTER STATUS CARD */}
       <View style={[styles.heroCard, { backgroundColor: colors.card, borderColor: 'rgba(101, 217, 255, 0.25)' }]}>
-        <View style={styles.heroHeaderTag}>
-          <Text style={styles.heroHeaderTagText}>[ HUNTER STATUS WINDOW ]</Text>
-          <View style={[styles.rankTag, { borderColor: rankColor, backgroundColor: `${rankColor}15` }]}>
-            <Text style={[styles.rankTagText, { color: rankColor }]}>{profile.rank}-RANK</Text>
-          </View>
-        </View>
-
         <View style={styles.heroTop}>
           <View style={styles.rankContainer}>
             <Text style={[styles.rank, { color: rankColor }]}>{profile.rank}</Text>
@@ -169,7 +151,6 @@ export default function HomeScreen() {
             <View style={styles.levelBadge}>
               <Text style={styles.levelNumber}>LVL {profile.level}</Text>
             </View>
-            <Text style={[styles.titleText, { color: colors.mutedForeground }]}>{profile.title}</Text>
           </View>
         </View>
 
@@ -208,7 +189,6 @@ export default function HomeScreen() {
             <Feather name="zap" size={15} color="#ffb25c" />
             <Text style={[styles.streakText, { color: colors.foreground }]}>{profile.streak} day streak</Text>
           </View>
-          <Text style={[styles.dateText, { color: colors.mutedForeground }]}>{todayLabel}</Text>
         </View>
       </View>
 
@@ -348,32 +328,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 14,
   },
-  heroHeaderTag: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  heroHeaderTagText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: 'rgba(255, 255, 255, 0.4)',
-    letterSpacing: 1.5,
-  },
-  rankTag: {
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  rankTagText: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
   heroTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -416,12 +370,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#65d9ff',
     letterSpacing: 1,
-  },
-  titleText: {
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 6,
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
   },
   xpLine: {
     flexDirection: 'row',
@@ -490,9 +438,6 @@ const styles = StyleSheet.create({
   streakText: {
     fontSize: 12,
     fontWeight: '700',
-  },
-  dateText: {
-    fontSize: 11,
   },
   lockdown: {
     flexDirection: 'row',
@@ -567,28 +512,9 @@ const styles = StyleSheet.create({
   questCopy: {
     flex: 1,
   },
-  questHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
   questTitle: {
     fontSize: 14,
     fontWeight: '700',
-  },
-  sensorBadge: {
-    backgroundColor: 'rgba(0, 229, 255, 0.15)',
-    borderWidth: 1,
-    borderColor: '#00e5ff',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  sensorBadgeText: {
-    fontSize: 8,
-    fontWeight: '900',
-    color: '#00e5ff',
-    letterSpacing: 0.5,
   },
   questDetail: {
     fontSize: 11,

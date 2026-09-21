@@ -109,20 +109,21 @@ export default function QuestsScreen() {
 
         return (
           <View key={quest.id} style={[styles.card, { backgroundColor: colors.card, borderColor: completed ? colors.primary : colors.border }]}>
-            <View style={[styles.icon, { backgroundColor: `${meta.color}20` }]}>
+            <Pressable
+              onPress={() => (isAnySensorQuest && !completed ? claimCompletion(quest) : undefined)}
+              style={[styles.icon, { backgroundColor: `${meta.color}20` }]}
+            >
               <Feather name={meta.icon} size={19} color={meta.color} />
-            </View>
+            </Pressable>
             <View style={styles.copy}>
-              <Text style={[styles.title, { color: colors.foreground }]}>{quest.title}</Text>
-              <Text style={[styles.detail, { color: colors.mutedForeground }]}>{quest.detail} · {quest.target} {quest.unit}</Text>
+              <Pressable onPress={() => (isAnySensorQuest && !completed ? claimCompletion(quest) : undefined)}>
+                <Text style={[styles.title, { color: colors.foreground }]}>{quest.title}</Text>
+                <Text style={[styles.detail, { color: colors.mutedForeground }]}>{quest.detail} · {quest.target} {quest.unit}</Text>
+              </Pressable>
               {!completed ? <>
                 <View style={styles.progressHeader}>
-                  <Text style={[styles.progressText, { color: isAnySensorQuest ? colors.primary : colors.mutedForeground }]}>
-                    {isWalkQuest
-                      ? '🛰️ 3.00 KM GPS SENSOR'
-                      : isPoseQuest
-                      ? `👁️ AI CAMERA SENSOR (${progress}/${quest.target} ${quest.unit})`
-                      : `${progress} / ${quest.target} ${quest.unit}`}
+                  <Text style={[styles.progressText, { color: colors.mutedForeground }]}>
+                    {progress} / {quest.target} {quest.unit}
                   </Text>
                   {!isAnySensorQuest ? (
                     <View style={styles.progressControls}>
@@ -133,30 +134,6 @@ export default function QuestsScreen() {
                 </View>
                 <View style={[styles.progressTrack, { backgroundColor: colors.muted }]}><View style={[styles.progressFill, { width: `${progressPercent}%`, backgroundColor: meta.color }]} /></View>
                 {quest.unit === 'min' ? <Pressable onPress={() => toggleTimer(quest)} style={[styles.timerButton, { borderColor: isTiming ? colors.primary : colors.border }]}><Feather name={isTiming ? 'square' : 'play'} size={11} color={colors.primary} /><Text style={[styles.timerText, { color: colors.primary }]}>{isTiming ? `STOP ${String(Math.floor(elapsedSeconds / 60)).padStart(2, '0')}:${String(elapsedSeconds % 60).padStart(2, '0')}` : 'START TIMER'}</Text></Pressable> : null}
-                {isWalkQuest ? (
-                  <Pressable
-                    onPress={() => router.push({ pathname: '/walk-quest' } as any)}
-                    style={[styles.sensorButton, { borderColor: colors.primary, backgroundColor: `${colors.primary}18` }]}
-                  >
-                    <Feather name="navigation" size={12} color={colors.primary} />
-                    <Text style={[styles.sensorButtonText, { color: colors.primary }]}>START GPS SENSOR WALK</Text>
-                  </Pressable>
-                ) : isPoseQuest ? (
-                  <Pressable
-                    onPress={() =>
-                      router.push({
-                        pathname: '/pose-tracker' as any,
-                        params: { exercise: isPushupQuest ? 'pushups' : 'situps', questId: quest.id },
-                      })
-                    }
-                    style={[styles.sensorButton, { borderColor: colors.primary, backgroundColor: `${colors.primary}18` }]}
-                  >
-                    <Feather name="camera" size={12} color={colors.primary} />
-                    <Text style={[styles.sensorButtonText, { color: colors.primary }]}>
-                      START AI VISION {isPushupQuest ? 'PUSH-UPS' : 'SIT-UPS'}
-                    </Text>
-                  </Pressable>
-                ) : null}
               </> : null}
               <View style={styles.metaLine}>
                 <Text style={[styles.category, { color: meta.color }]}>{quest.category}</Text>
@@ -284,22 +261,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(101, 217, 255, 0.08)',
   },
   timerText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
-  sensorButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1.5,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    alignSelf: 'flex-start',
-    marginTop: 10,
-    shadowColor: '#00e5ff',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  sensorButtonText: { fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
   category: { fontSize: 9, fontWeight: '800', letterSpacing: 1 },
   xp: { fontSize: 10, fontWeight: '800' },
   actions: { alignItems: 'center', gap: 12, marginLeft: 10 },
