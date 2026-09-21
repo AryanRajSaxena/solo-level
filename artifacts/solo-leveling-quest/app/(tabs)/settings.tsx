@@ -8,8 +8,7 @@ import { Screen, SectionHeader } from '@/components/Screen';
 import { DAY_LABELS, Weekday, useQuestContext } from '@/context/QuestContext';
 import { useColors } from '@/hooks/useColors';
 import {
-  SOLO_LEVELING_ALARM_TONES,
-  SoloLevelingAlarmTone,
+  ARCHITECT_TRIAL_TRACK,
   alarmAudio,
 } from '@/utils/alarmAudio';
 
@@ -33,8 +32,7 @@ export default function SettingsScreen() {
   const [alarmEnabled, setAlarmEnabled] = useState(true);
   const [alarmHour, setAlarmHour] = useState(6);
   const [alarmMinute, setAlarmMinute] = useState(30);
-  const [selectedTone, setSelectedTone] = useState<SoloLevelingAlarmTone>(alarmAudio.getActiveTone());
-  const [previewingTone, setPreviewingTone] = useState<SoloLevelingAlarmTone | null>(null);
+  const [isPreviewing, setIsPreviewing] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -45,10 +43,6 @@ export default function SettingsScreen() {
           if (typeof parsed.enabled === 'boolean') setAlarmEnabled(parsed.enabled);
           if (typeof parsed.hour === 'number') setAlarmHour(parsed.hour);
           if (typeof parsed.minute === 'number') setAlarmMinute(parsed.minute);
-          if (parsed.tone && ['system_emergency', 'shadow_monarch', 'architect_dungeon'].includes(parsed.tone)) {
-            setSelectedTone(parsed.tone);
-            alarmAudio.setActiveTone(parsed.tone);
-          }
         }
       } catch {}
     })();
@@ -58,42 +52,35 @@ export default function SettingsScreen() {
     };
   }, []);
 
-  const saveAlarmSettings = async (enabled: boolean, hour: number, minute: number, tone: SoloLevelingAlarmTone) => {
+  const saveAlarmSettings = async (enabled: boolean, hour: number, minute: number) => {
     setAlarmEnabled(enabled);
     setAlarmHour(hour);
     setAlarmMinute(minute);
-    setSelectedTone(tone);
-    alarmAudio.setActiveTone(tone);
     try {
       await AsyncStorage.setItem(
         ALARM_SETTINGS_KEY,
-        JSON.stringify({ enabled, hour, minute, tone })
+        JSON.stringify({ enabled, hour, minute })
       );
     } catch {}
   };
 
   const handleHourChange = (delta: number) => {
     const nextHour = (alarmHour + delta + 24) % 24;
-    void saveAlarmSettings(alarmEnabled, nextHour, alarmMinute, selectedTone);
+    void saveAlarmSettings(alarmEnabled, nextHour, alarmMinute);
   };
 
   const handleMinuteChange = (delta: number) => {
     const nextMinute = (alarmMinute + delta + 60) % 60;
-    void saveAlarmSettings(alarmEnabled, alarmHour, nextMinute, selectedTone);
+    void saveAlarmSettings(alarmEnabled, alarmHour, nextMinute);
   };
 
-  const handleSelectTone = (tone: SoloLevelingAlarmTone) => {
-    void saveAlarmSettings(alarmEnabled, alarmHour, alarmMinute, tone);
-    alarmAudio.playSystemNotificationSound();
-  };
-
-  const handleTogglePreview = (tone: SoloLevelingAlarmTone) => {
-    if (previewingTone === tone) {
+  const handleTogglePreview = () => {
+    if (isPreviewing) {
       alarmAudio.stopPreview();
-      setPreviewingTone(null);
+      setIsPreviewing(false);
     } else {
-      setPreviewingTone(tone);
-      alarmAudio.previewTone(tone, () => setPreviewingTone(null));
+      setIsPreviewing(true);
+      alarmAudio.previewAlarm(() => setIsPreviewing(false));
     }
   };
 
@@ -165,7 +152,7 @@ export default function SettingsScreen() {
             </View>
             <Switch
               value={alarmEnabled}
-              onValueChange={(val) => void saveAlarmSettings(val, alarmHour, alarmMinute, selectedTone)}
+              onValueChange={(val) => void saveAlarmSettings(val, alarmHour, alarmMinute)}
               trackColor={{ false: colors.muted, true: '#ffb25c' }}
               thumbColor={colors.foreground}
             />
@@ -218,7 +205,7 @@ export default function SettingsScreen() {
                   return (
                     <Pressable
                       key={preset.label}
-                      onPress={() => void saveAlarmSettings(alarmEnabled, preset.h, preset.m, selectedTone)}
+                      onPress={() => void saveAlarmSettings(alarmEnabled, preset.h, preset.m)}
                       style={[styles.presetChip, isPresetActive && styles.presetChipActive]}
                     >
                       <Text style={[styles.presetChipText, isPresetActive && styles.presetChipTextActive]}>
@@ -231,61 +218,43 @@ export default function SettingsScreen() {
 
               <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-              {/* Solo Leveling Alarm Tone Selector */}
+              {/* Solo Leveling Dedicated Soundtrack */}
               <View style={styles.toneSection}>
                 <View style={styles.toneSectionHeader}>
-                  <Feather name="radio" size={12} color="#00e5ff" />
-                  <Text style={styles.toneSectionTitle}>SOLO LEVELING SYSTEM FREQUENCY</Text>
+                  <Feather name="disc" size={12} color="#00e5ff" />
+                  <Text style={styles.toneSectionTitle}>ALARM SOUNDTRACK</Text>
                 </View>
 
-                {SOLO_LEVELING_ALARM_TONES.map((tone) => {
-                  const isSelected = selectedTone === tone.id;
-                  const isPreviewing = previewingTone === tone.id;
+                <View style={styles.toneCard}>
+                  <View style={styles.toneIcon}>
+                    <Feather name="volume-2" size={16} color="#00e5ff" />
+                  </View>
 
-                  return (
-                    <Pressable
-                      key={tone.id}
-                      onPress={() => handleSelectTone(tone.id)}
-                      style={[
-                        styles.toneCard,
-                        isSelected && { borderColor: '#00e5ff', backgroundColor: 'rgba(0, 229, 255, 0.07)' },
-                      ]}
-                    >
-                      <View style={[styles.toneRadio, isSelected && { borderColor: '#00e5ff' }]}>
-                        {isSelected && <View style={styles.toneRadioInner} />}
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.toneName}>{ARCHITECT_TRIAL_TRACK.name}</Text>
+                      <View style={styles.toneBadge}>
+                        <Text style={styles.toneBadgeText}>{ARCHITECT_TRIAL_TRACK.badge}</Text>
                       </View>
+                    </View>
+                    <Text style={styles.toneSubtitle}>{ARCHITECT_TRIAL_TRACK.subtitle}</Text>
+                  </View>
 
-                      <View style={{ flex: 1, gap: 2 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          <Text style={[styles.toneName, isSelected && { color: '#00e5ff' }]}>
-                            {tone.name}
-                          </Text>
-                          <View style={[styles.toneBadge, isSelected && { borderColor: '#00e5ff' }]}>
-                            <Text style={[styles.toneBadgeText, isSelected && { color: '#00e5ff' }]}>
-                              {tone.badge}
-                            </Text>
-                          </View>
-                        </View>
-                        <Text style={styles.toneSubtitle}>{tone.subtitle}</Text>
-                      </View>
-
-                      <Pressable
-                        onPress={() => handleTogglePreview(tone.id)}
-                        hitSlop={8}
-                        style={[styles.previewBtn, isPreviewing && styles.previewBtnActive]}
-                      >
-                        <Feather
-                          name={isPreviewing ? 'square' : 'volume-2'}
-                          size={13}
-                          color={isPreviewing ? '#ff2a55' : '#ffb25c'}
-                        />
-                        <Text style={[styles.previewBtnText, isPreviewing && { color: '#ff2a55' }]}>
-                          {isPreviewing ? 'STOP' : 'TEST'}
-                        </Text>
-                      </Pressable>
-                    </Pressable>
-                  );
-                })}
+                  <Pressable
+                    onPress={handleTogglePreview}
+                    hitSlop={8}
+                    style={[styles.previewBtn, isPreviewing && styles.previewBtnActive]}
+                  >
+                    <Feather
+                      name={isPreviewing ? 'square' : 'play'}
+                      size={12}
+                      color={isPreviewing ? '#ff2a55' : '#00e5ff'}
+                    />
+                    <Text style={[styles.previewBtnText, isPreviewing && { color: '#ff2a55' }]}>
+                      {isPreviewing ? 'STOP' : 'PREVIEW'}
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
 
               {/* Single Launch Action */}
@@ -578,35 +547,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    borderColor: 'rgba(0, 229, 255, 0.3)',
+    backgroundColor: 'rgba(0, 229, 255, 0.05)',
     borderRadius: 12,
-    padding: 10,
-    gap: 10,
+    padding: 12,
+    gap: 12,
   },
-  toneRadio: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+  toneIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    backgroundColor: 'rgba(0, 229, 255, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  toneRadioInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#00e5ff',
   },
   toneName: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#fff',
+    color: '#00e5ff',
   },
   toneBadge: {
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: '#00e5ff',
     paddingHorizontal: 5,
     paddingVertical: 0.5,
     borderRadius: 4,
@@ -615,22 +577,22 @@ const styles = StyleSheet.create({
     fontSize: 7,
     fontWeight: '900',
     letterSpacing: 0.6,
-    color: 'rgba(255, 255, 255, 0.5)',
+    color: '#00e5ff',
   },
   toneSubtitle: {
     fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.4)',
+    color: 'rgba(255, 255, 255, 0.5)',
   },
   previewBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     borderWidth: 1,
-    borderColor: 'rgba(255, 178, 92, 0.4)',
-    backgroundColor: 'rgba(255, 178, 92, 0.08)',
+    borderColor: 'rgba(0, 229, 255, 0.4)',
+    backgroundColor: 'rgba(0, 229, 255, 0.1)',
     borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
   },
   previewBtnActive: {
     borderColor: '#ff2a55',
@@ -639,7 +601,7 @@ const styles = StyleSheet.create({
   previewBtnText: {
     fontSize: 9,
     fontWeight: '900',
-    color: '#ffb25c',
+    color: '#00e5ff',
     letterSpacing: 0.8,
   },
   launchBtn: {
