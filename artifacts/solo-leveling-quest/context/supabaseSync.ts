@@ -406,8 +406,8 @@ export function syncRestDays(days: number[]): void {
   })();
 }
 
-/** Apply penalty lockdown in Supabase. */
-export function syncPenalty(profileUpdates: { lockdownUntil: number; xp: number }): void {
+/** Apply or clear penalty lockdown in Supabase. */
+export function syncPenalty(profileUpdates: { lockdownUntil: number | null; xp: number }): void {
   void (async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -415,9 +415,8 @@ export function syncPenalty(profileUpdates: { lockdownUntil: number; xp: number 
       const { error } = await supabase
         .from('profiles')
         .update({
-          lockdown_until: new Date(profileUpdates.lockdownUntil).toISOString(),
-          streak: 0,
-          last_completed_date: null,
+          lockdown_until: profileUpdates.lockdownUntil ? new Date(profileUpdates.lockdownUntil).toISOString() : null,
+          ...(profileUpdates.lockdownUntil ? { streak: 0, last_completed_date: null } : {}),
           xp: profileUpdates.xp,
         })
         .eq('user_id', user.id);

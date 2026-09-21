@@ -106,6 +106,7 @@ type QuestContextValue = {
   updateNotificationPreferences: (updates: Partial<NotificationPreferences>) => Promise<boolean>;
   completeOnboarding: (name: string) => void;
   resetPenaltyForDemo: () => void;
+  clearPenalty: () => void;
   awardAlarmRewards: (xpAmount?: number, disciplineAmount?: number) => void;
   completeAssessment: (result: {
     rank: 'E' | 'D' | 'C' | 'B' | 'A' | 'S';
@@ -753,6 +754,14 @@ export function QuestProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const clearPenalty = () => {
+    setProfile((current) => {
+      syncPenalty({ lockdownUntil: null, xp: current.xp });
+      return { ...current, lockdownUntil: null };
+    });
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
   const awardAlarmRewards = (xpAmount = 50, disciplineAmount = 1) => {
     let updatedProfile: HunterProfile | null = null;
     setProfile((current) => {
@@ -849,6 +858,7 @@ export function QuestProvider({ children }: { children: React.ReactNode }) {
         updateNotificationPreferences,
         completeOnboarding,
         resetPenaltyForDemo,
+        clearPenalty,
         awardAlarmRewards,
         completeAssessment,
       }}

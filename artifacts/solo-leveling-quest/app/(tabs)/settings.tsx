@@ -1,4 +1,4 @@
-﻿import { Feather } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { useSupabaseAuth } from '@/context/SupabaseAuthProvider';
 import { useRouter } from 'expo-router';
 import React, { useState, useEffect } from 'react';
@@ -11,6 +11,8 @@ import {
   ARCHITECT_TRIAL_TRACK,
   alarmAudio,
 } from '@/utils/alarmAudio';
+import { SocialLockdownModal } from '@/components/penalty/SocialLockdownModal';
+import { RESTRICTED_APPS, getRemainingLockdownTime } from '@/utils/socialAppLockdown';
 
 const ALARM_SETTINGS_KEY = '@solo-leveling-quest/alarm-settings-v1';
 
@@ -25,8 +27,27 @@ export default function SettingsScreen() {
   const colors = useColors();
   const router = useRouter();
   const { signOut } = useSupabaseAuth();
-  const { restDays, toggleRestDay, notificationPreferences, updateNotificationPreferences, resetPenaltyForDemo } = useQuestContext();
+  const {
+    profile,
+    isLockedDown,
+    clearPenalty,
+    restDays,
+    toggleRestDay,
+    notificationPreferences,
+    updateNotificationPreferences,
+    resetPenaltyForDemo,
+  } = useQuestContext();
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [showLockdownModal, setShowLockdownModal] = useState(false);
+  const [countdown, setCountdown] = useState(() => getRemainingLockdownTime(profile.lockdownUntil));
+
+  useEffect(() => {
+    setCountdown(getRemainingLockdownTime(profile.lockdownUntil));
+    const interval = setInterval(() => {
+      setCountdown(getRemainingLockdownTime(profile.lockdownUntil));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [profile.lockdownUntil]);
 
   // Alarm settings state
   const [alarmEnabled, setAlarmEnabled] = useState(true);
@@ -122,7 +143,32 @@ export default function SettingsScreen() {
 
   const simulatePenalty = () => {
     resetPenaltyForDemo();
-    Alert.alert('Lockdown Activated', 'The in-app penalty is active for 24 hours. Your streak was reset and 100 XP was deducted.');
+    Alert.alert(
+      'System Lockdown Activated',
+      'Penalty directive initiated for 24 hours. Social and commercial portals (Instagram, LinkedIn, Facebook, Flipkart, Amazon, Myntra) are now sealed.',
+      [
+        { text: 'DISMISS', style: 'cancel' },
+        { text: 'VIEW PORTALS HUD', onPress: () => setShowLockdownModal(true) },
+      ],
+    );
+  };
+
+  const handleDispelPenalty = () => {
+    Alert.alert(
+      'Dispel Penalty Override',
+      'Are you sure you want to dispel the System Penalty early? This will unseal all social and commercial portals.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'DISPEL PENALTY',
+          style: 'destructive',
+          onPress: () => {
+            clearPenalty();
+            Alert.alert('Lockdown Dispelled', 'System penalty cleared. All portals have been unsealed.');
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -358,22 +404,62 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      {/* ─── SECTION 4: ZERO-TOLERANCE PROTOCOL ─── */}
+      {/* ─── SECTION 4: ZERO-TOLERANCE PROTOCOL // SOCIAL LOCKDOWN ─── */}
       <View style={styles.section}>
-        <View style={styles.penaltyCard}>
+        <View style={[styles.penaltyCard, isLockedDown && styles.penaltyCardActive]}>
           <View style={styles.penaltyHeader}>
             <Feather name="alert-triangle" size={15} color="#ff2a55" />
-            <Text style={styles.penaltyTitle}>PENALTY DIRECTIVE</Text>
-            <View style={styles.penaltyBadge}>
-              <Text style={styles.penaltyBadgeText}>ACTIVE</Text>
+            <Text style={styles.penaltyTitle}>PENALTY DIRECTIVE // APP LOCKDOWN</Text>
+            <View style={[styles.penaltyBadge, isLockedDown && { backgroundColor: '#ff2a55' }]}>
+              <Text style={[styles.penaltyBadgeText, isLockedDown && { color: '#ffffff' }]}>
+                {isLockedDown ? 'ACTIVE' : 'ENFORCED'}
+              </Text>
             </View>
           </View>
-          <Text style={styles.penaltyBody}>
-            Uncompleted active days trigger a 24-hr social lockdown, streak termination, and -100 XP reduction.
-          </Text>
-          <Pressable onPress={simulatePenalty} style={styles.penaltySimBtn}>
-            <Text style={styles.penaltySimBtnText}>SIMULATE LOCKDOWN DEMO</Text>
-          </Pressable>
+
+          {isLockedDown ? (
+            <View style={styles.activeLockdownBlock}>
+              <Text style={styles.activeLockdownTimer}>{countdown.formatted}</Text>
+              <Text style={styles.activeLockdownSub}>
+                PENALTY SURVIVAL TIME REMAINING · Distraction portals sealed
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.penaltyBody}>
+              Uncompleted active days trigger a 24-hr social lockdown across Instagram, LinkedIn, Facebook, Flipkart, Amazon, Myntra, and entertainment portals.
+            </Text>
+          )}
+
+          {/* Mini preview row of restricted apps */}
+          <View style={styles.appPillsRow}>
+            {RESTRICTED_APPS.slice(0, 6).map((app) => (
+              <View key={app.id} style={[styles.appMiniPill, isLockedDown && styles.appMiniPillLocked]}>
+                <Feather name={app.featherIcon as unknown as any} size={11} color={isLockedDown ? '#ff2a55' : colors.mutedForeground} />
+                <Text style={[styles.appMiniPillText, { color: isLockedDown ? '#ff8599' : colors.mutedForeground }]}>
+                  {app.name}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          {/* Action buttons */}
+          <View style={styles.penaltyActionRow}>
+            <Pressable onPress={() => setShowLockdownModal(true)} style={styles.penaltyViewBtn}>
+              <Feather name="shield" size={13} color="#00e5ff" />
+              <Text style={styles.penaltyViewBtnText}>VIEW SEALED PORTALS</Text>
+            </Pressable>
+
+            {isLockedDown ? (
+              <Pressable onPress={handleDispelPenalty} style={styles.penaltyDispelBtn}>
+                <Feather name="unlock" size={13} color="#ff8599" />
+                <Text style={styles.penaltyDispelBtnText}>DISPEL PENALTY</Text>
+              </Pressable>
+            ) : (
+              <Pressable onPress={simulatePenalty} style={styles.penaltySimBtn}>
+                <Text style={styles.penaltySimBtnText}>SIMULATE LOCKDOWN</Text>
+              </Pressable>
+            )}
+          </View>
         </View>
       </View>
 
@@ -390,6 +476,14 @@ export default function SettingsScreen() {
           </Text>
         </Pressable>
       </View>
+
+      <SocialLockdownModal
+        visible={showLockdownModal}
+        onClose={() => setShowLockdownModal(false)}
+        lockdownUntil={profile.lockdownUntil}
+        onClearPenalty={clearPenalty}
+        onStartAtonement={() => router.push('/pose-tracker' as any)}
+      />
     </Screen>
   );
 }
@@ -658,7 +752,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 42, 85, 0.05)',
     borderRadius: 16,
     padding: 14,
-    gap: 8,
+    gap: 10,
+  },
+  penaltyCardActive: {
+    borderColor: '#ff2a55',
+    backgroundColor: 'rgba(255, 42, 85, 0.12)',
   },
   penaltyHeader: {
     flexDirection: 'row',
@@ -686,19 +784,107 @@ const styles = StyleSheet.create({
     color: '#ff2a55',
     letterSpacing: 1,
   },
+  activeLockdownBlock: {
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  activeLockdownTimer: {
+    color: '#ffffff',
+    fontSize: 26,
+    fontWeight: '900',
+    fontFamily: 'monospace',
+    letterSpacing: 2,
+    textShadowColor: '#ff2a55',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
+  },
+  activeLockdownSub: {
+    color: '#ff8599',
+    fontSize: 10,
+    fontFamily: 'monospace',
+    fontWeight: '700',
+    marginTop: 2,
+    textAlign: 'center',
+  },
   penaltyBody: {
     fontSize: 11,
     lineHeight: 16,
     color: 'rgba(255, 255, 255, 0.65)',
   },
+  appPillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginVertical: 2,
+  },
+  appMiniPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  appMiniPillLocked: {
+    backgroundColor: 'rgba(255, 42, 85, 0.15)',
+    borderColor: 'rgba(255, 42, 85, 0.5)',
+  },
+  appMiniPillText: {
+    fontSize: 9,
+    fontWeight: '700',
+    fontFamily: 'monospace',
+  },
+  penaltyActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  penaltyViewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(0, 229, 255, 0.1)',
+    borderWidth: 1,
+    borderColor: '#00e5ff',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  penaltyViewBtnText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#00e5ff',
+    fontFamily: 'monospace',
+    letterSpacing: 0.8,
+  },
+  penaltyDispelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#ff2a55',
+    backgroundColor: 'rgba(255, 42, 85, 0.2)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  penaltyDispelBtnText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#ff8599',
+    fontFamily: 'monospace',
+    letterSpacing: 0.8,
+  },
   penaltySimBtn: {
-    alignSelf: 'flex-start',
     borderWidth: 1,
     borderColor: 'rgba(255, 42, 85, 0.5)',
-    borderRadius: 7,
+    borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-    marginTop: 4,
+    paddingVertical: 7,
   },
   penaltySimBtnText: {
     fontSize: 9,

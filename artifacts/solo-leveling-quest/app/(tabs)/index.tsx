@@ -1,11 +1,12 @@
 
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View, Platform } from 'react-native';
 import { Screen, SectionHeader, IconButton } from '@/components/Screen';
 import { useColors } from '@/hooks/useColors';
 import { useQuestContext, Quest } from '@/context/QuestContext';
+import { SocialLockdownModal } from '@/components/penalty/SocialLockdownModal';
 
 const RANK_COLORS: Record<string, string> = {
   S: '#ffd700',
@@ -119,7 +120,8 @@ function QuestRow({
 export default function HomeScreen() {
   const colors = useColors();
   const router = useRouter();
-  const { profile, activeQuests, completedCount, completionPercent, completeQuest, isLockedDown } = useQuestContext();
+  const { profile, activeQuests, completedCount, completionPercent, completeQuest, isLockedDown, clearPenalty } = useQuestContext();
+  const [showLockdownModal, setShowLockdownModal] = useState(false);
   const nextQuest = activeQuests.find((quest) => quest.completedOn === null);
   const rankColor = RANK_COLORS[profile.rank] ?? colors.primary;
 
@@ -193,11 +195,11 @@ export default function HomeScreen() {
       </View>
 
       {isLockedDown ? (
-        <Pressable onPress={() => router.push('/(tabs)/settings')} style={[styles.lockdown, { backgroundColor: '#291827', borderColor: colors.destructive }]}>
+        <Pressable onPress={() => setShowLockdownModal(true)} style={[styles.lockdown, { backgroundColor: '#291827', borderColor: colors.destructive }]}>
           <Feather name="lock" size={18} color={colors.destructive} />
           <View style={{ flex: 1 }}>
-            <Text style={[styles.lockdownTitle, { color: colors.foreground }]}>LOCKDOWN ACTIVE</Text>
-            <Text style={[styles.lockdownCopy, { color: colors.mutedForeground }]}>Your social portals are sealed for 24 hours. Return to system settings to review the penalty.</Text>
+            <Text style={[styles.lockdownTitle, { color: colors.foreground }]}>LOCKDOWN ACTIVE // PORTALS SEALED</Text>
+            <Text style={[styles.lockdownCopy, { color: colors.mutedForeground }]}>Social & shopping apps are locked by System directive. Tap to inspect sealed portals & countdown.</Text>
           </View>
           <Feather name="chevron-right" size={18} color={colors.destructive} />
         </Pressable>
@@ -285,6 +287,14 @@ export default function HomeScreen() {
           <Text style={[styles.nextXp, { color: colors.foreground }]}>+{nextQuest.xp} XP</Text>
         </Pressable>
       ) : null}
+
+      <SocialLockdownModal
+        visible={showLockdownModal}
+        onClose={() => setShowLockdownModal(false)}
+        lockdownUntil={profile.lockdownUntil}
+        onClearPenalty={clearPenalty}
+        onStartAtonement={() => router.push('/pose-tracker' as any)}
+      />
     </Screen>
   );
 }
