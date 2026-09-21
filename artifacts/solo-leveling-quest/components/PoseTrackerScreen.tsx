@@ -52,12 +52,17 @@ export const PoseTrackerScreen = ({
     targetReps,
     stage: 'CALIBRATING',
     angle: 0,
+    rawAngle: 0,
     formFeedback: 'Initializing System Visual Sensors...',
     isGoodForm: true,
+    formIssues: [],
     leftConfidence: 0,
     rightConfidence: 0,
     activeSide: 'left',
+    repQuality: null,
+    consecutiveGoodForm: 0,
   });
+
 
   const evaluatorRef = useRef<PoseEvaluator>(new PoseEvaluator(exercise, targetReps));
   const videoRef = useRef<HTMLVideoElement | null>(null);
