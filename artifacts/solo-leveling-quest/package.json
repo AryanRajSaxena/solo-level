@@ -8,7 +8,7 @@
     "dev": "expo start",
     "build": "node scripts/build.js",
     "build:web": "expo export -p web",
-    "build:apk": "npx eas-cli build -p android --profile preview",
+    "build:apk": "eas build -p android --profile preview",
     "serve": "node server/serve.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
