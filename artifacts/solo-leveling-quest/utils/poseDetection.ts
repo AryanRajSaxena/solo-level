@@ -1,22 +1,20 @@
 /**
- * poseDetection.ts
+ * poseDetection.ts — FIXED
  *
- * Google MediaPipe / BlazePose Pose Landmarker on-device AI integration.
- * Calculates real-time 3D joint angles and implements biomechanical state machines
- * for counting Push-ups and Sit-ups with form validation.
- *
- * v2 — Improved tracking accuracy:
- *   • Exponential Moving Average (EMA) angle smoothing
- *   • Bilateral joint averaging weighted by visibility
- *   • Hysteresis-based state machine (separate enter/exit thresholds)
- *   • Comprehensive multi-point form validation
- *   • Anti-cheat: velocity cap, bottom-hold requirement, visibility gate
- *   • Calibration phase (first ~500ms)
+ * Changes from original:
+ *  1. calculateAngle3D() — 3D dot-product replaces 2D atan2 (fixes front-camera accuracy)
+ *  2. PUSHUP_UP_ENTER lowered 160° → 145° (THE main rep-counting fix)
+ *  3. PUSHUP_DOWN_ENTER raised 85° → 90° (more permissive)
+ *  4. True hysteresis: separate ENTER/EXIT thresholds per phase (fixes holdFrameCount reset bug)
+ *  5. MIN_REP_INTERVAL_MS reduced 1200 → 800 (allows moderate-paced push-ups)
+ *  6. PUSHUP_PLANK_MIN lowered 155° → 145° (reduces false form feedback)
+ *  7. Elbow flare check removed (was only valid for front-view camera, false positives on side view)
+ *  8. confirmedDown / confirmedUp state added for hysteresis (new class properties)
  */
 
 export interface Landmark {
-  x: number; // Normalized 0..1
-  y: number; // Normalized 0..1
+  x: number;
+  y: number;
   z: number;
   visibility?: number;
 }
@@ -28,11 +26,11 @@ export interface ExerciseState {
   reps: number;
   targetReps: number;
   stage: 'UP' | 'DOWN' | 'TRANSITION' | 'CALIBRATING';
-  angle: number; // Smoothed primary joint angle in degrees
-  rawAngle: number; // Unsmoothed angle for debug
+  angle: number;
+  rawAngle: number;
   formFeedback: string;
   isGoodForm: boolean;
-  formIssues: string[]; // All active form problems
+  formIssues: string[];
   leftConfidence: number;
   rightConfidence: number;
   activeSide: 'left' | 'right';
@@ -40,7 +38,6 @@ export interface ExerciseState {
   consecutiveGoodForm: number;
 }
 
-// MediaPipe Landmark Indices
 export const POSE_LANDMARKS = {
   NOSE: 0,
   LEFT_SHOULDER: 11,
@@ -57,100 +54,107 @@ export const POSE_LANDMARKS = {
   RIGHT_ANKLE: 28,
 };
 
-// Skeletal connections for drawing wireframes
 export const POSE_CONNECTIONS: [number, number][] = [
-  // Torso
   [POSE_LANDMARKS.LEFT_SHOULDER, POSE_LANDMARKS.RIGHT_SHOULDER],
   [POSE_LANDMARKS.LEFT_SHOULDER, POSE_LANDMARKS.LEFT_HIP],
   [POSE_LANDMARKS.RIGHT_SHOULDER, POSE_LANDMARKS.RIGHT_HIP],
   [POSE_LANDMARKS.LEFT_HIP, POSE_LANDMARKS.RIGHT_HIP],
-  // Left Arm
   [POSE_LANDMARKS.LEFT_SHOULDER, POSE_LANDMARKS.LEFT_ELBOW],
   [POSE_LANDMARKS.LEFT_ELBOW, POSE_LANDMARKS.LEFT_WRIST],
-  // Right Arm
   [POSE_LANDMARKS.RIGHT_SHOULDER, POSE_LANDMARKS.RIGHT_ELBOW],
   [POSE_LANDMARKS.RIGHT_ELBOW, POSE_LANDMARKS.RIGHT_WRIST],
-  // Left Leg
   [POSE_LANDMARKS.LEFT_HIP, POSE_LANDMARKS.LEFT_KNEE],
   [POSE_LANDMARKS.LEFT_KNEE, POSE_LANDMARKS.LEFT_ANKLE],
-  // Right Leg
   [POSE_LANDMARKS.RIGHT_HIP, POSE_LANDMARKS.RIGHT_KNEE],
   [POSE_LANDMARKS.RIGHT_KNEE, POSE_LANDMARKS.RIGHT_ANKLE],
 ];
 
 // ─── Tunable constants ───────────────────────────────────────
 
-/** EMA smoothing factor (0 = no smoothing, 1 = no memory). 0.35 is a good balance. */
 const EMA_ALPHA = 0.35;
-
-/** Minimum milliseconds between two counted reps */
-const MIN_REP_INTERVAL_MS = 1200;
-
-/** Consecutive frames at the extreme position required to confirm a phase */
+const MIN_REP_INTERVAL_MS = 800;      // FIX 5: was 1200 — allows ~1 rep/sec pace
 const HOLD_FRAMES_REQUIRED = 3;
-
-/** Max degrees of angle change per frame — anything beyond is noise or cheating */
 const MAX_ANGULAR_VELOCITY = 25;
-
-/** Frames spent in calibration before counting begins */
 const CALIBRATION_FRAMES = 15;
-
-/** Minimum visibility score (0–1) for a joint to be considered reliable */
 const MIN_JOINT_VISIBILITY = 0.5;
 
-// Push-up thresholds (hysteresis)
-const PUSHUP_DOWN_ENTER = 85; // Elbow angle to enter DOWN
-const PUSHUP_UP_ENTER = 160; // Elbow angle to enter UP
-const PUSHUP_PLANK_MIN = 155; // Shoulder-Hip-Ankle alignment minimum
+// Push-up thresholds — TRUE HYSTERESIS (separate enter vs exit per zone)
+// FIX 2: was single threshold per zone, causing holdFrameCount reset oscillation
+const PUSHUP_DOWN_ENTER  = 90;    // FIX 3: was 85 — enter DOWN when angle drops below this
+const PUSHUP_DOWN_EXIT   = 105;   // NEW — leave DOWN only when angle rises above this
+const PUSHUP_UP_ENTER    = 145;   // FIX 1: was 160 — THE main fix, enter UP when above this
+const PUSHUP_UP_EXIT     = 130;   // NEW — leave UP only when angle drops below this
+const PUSHUP_PLANK_MIN   = 145;   // FIX 6: was 155 — reduces false form feedback
 
-// Sit-up thresholds (hysteresis)
-const SITUP_UP_ENTER = 70; // Hip angle to enter UP (peak flexion)
-const SITUP_DOWN_ENTER = 140; // Hip angle to enter DOWN (lying)
-const SITUP_KNEE_MIN = 50; // Knee angle minimum (bent)
-const SITUP_KNEE_MAX = 110; // Knee angle maximum
+// Sit-up thresholds (unchanged — sit-up tracking was not reported broken)
+const SITUP_UP_ENTER  = 70;
+const SITUP_DOWN_ENTER = 140;
+const SITUP_KNEE_MIN  = 50;
+const SITUP_KNEE_MAX  = 110;
 
 // ──────────────────────────────────────────────────────────────
 
 /**
- * Calculates 3-point angle in degrees formed by point A, vertex B, and point C.
+ * Original 2D angle — kept for non-depth-critical calculations (sit-up knee angle, etc.)
  */
 export function calculateAngle(a: Landmark, b: Landmark, c: Landmark): number {
   const radians =
     Math.atan2(c.y - b.y, c.x - b.x) - Math.atan2(a.y - b.y, a.x - b.x);
   let angle = Math.abs((radians * 180.0) / Math.PI);
-  if (angle > 180.0) {
-    angle = 360.0 - angle;
-  }
+  if (angle > 180.0) angle = 360.0 - angle;
   return Math.round(angle);
 }
 
 /**
- * Computes a visibility-weighted average of left and right side angles.
- * Falls back to whichever side is visible if one side is below threshold.
+ * FIX 4: 3D angle using dot-product — accurate regardless of camera orientation.
+ *
+ * The original calculateAngle() used only x and y (Math.atan2(c.y - b.y, c.x - b.x)).
+ * For push-ups viewed from the front, arm movement is mostly in the z-depth axis.
+ * Ignoring z caused a fully-extended arm to read as ~90° instead of ~160°.
+ * This function includes z to get the true anatomical angle at joint B.
  */
+export function calculateAngle3D(a: Landmark, b: Landmark, c: Landmark): number {
+  // Vectors from vertex B toward each end joint
+  const v1 = {
+    x: a.x - b.x,
+    y: a.y - b.y,
+    z: (a.z ?? 0) - (b.z ?? 0),
+  };
+  const v2 = {
+    x: c.x - b.x,
+    y: c.y - b.y,
+    z: (c.z ?? 0) - (b.z ?? 0),
+  };
+
+  const dot = v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
+  const mag1 = Math.sqrt(v1.x ** 2 + v1.y ** 2 + v1.z ** 2);
+  const mag2 = Math.sqrt(v2.x ** 2 + v2.y ** 2 + v2.z ** 2);
+
+  if (mag1 === 0 || mag2 === 0) return 0;
+
+  // Clamp to [-1, 1] to guard against floating-point drift past ±1 in Math.acos
+  const cosAngle = Math.max(-1, Math.min(1, dot / (mag1 * mag2)));
+  return Math.round((Math.acos(cosAngle) * 180) / Math.PI);
+}
+
 function bilateralAngle(
   leftAngle: number,
   rightAngle: number,
   leftVis: number,
   rightVis: number,
 ): number {
-  const leftOk = leftVis >= MIN_JOINT_VISIBILITY;
+  const leftOk  = leftVis  >= MIN_JOINT_VISIBILITY;
   const rightOk = rightVis >= MIN_JOINT_VISIBILITY;
 
   if (leftOk && rightOk) {
-    // Weighted average by visibility confidence
     const total = leftVis + rightVis;
     return Math.round((leftAngle * leftVis + rightAngle * rightVis) / total);
   }
-  if (leftOk) return leftAngle;
+  if (leftOk)  return leftAngle;
   if (rightOk) return rightAngle;
-  // Neither side is reliable — return average as best effort
   return Math.round((leftAngle + rightAngle) / 2);
 }
 
-/**
- * Average visibility of a set of landmarks.
- */
 function avgVisibility(...landmarks: Landmark[]): number {
   const sum = landmarks.reduce((acc, lm) => acc + (lm.visibility ?? 0), 0);
   return sum / landmarks.length;
@@ -162,23 +166,22 @@ export class PoseEvaluator {
   private reps: number = 0;
   private stage: 'UP' | 'DOWN' | 'TRANSITION' | 'CALIBRATING' = 'CALIBRATING';
 
-  // EMA state
   private smoothedAngle: number = 0;
   private previousRawAngle: number = 0;
   private hasSmoothedValue: boolean = false;
 
-  // Hysteresis / hold tracking
-  private wasAtExtreme: boolean = false; // true when user confirmed at DOWN (pushups) or UP (situps)
-  private holdFrameCount: number = 0; // consecutive frames at the extreme
+  private wasAtExtreme: boolean = false;
+  private holdFrameCount: number = 0;
   private lastRepTimestamp: number = 0;
 
-  // Calibration
-  private frameCount: number = 0;
+  // FIX 2 — hysteresis: track whether we are confirmed inside each stable zone
+  private confirmedDown: boolean = false;
+  private confirmedUp: boolean = false;
 
-  // Form tracking
+  private frameCount: number = 0;
   private consecutiveGoodForm: number = 0;
-  private lastRepGoodFormFrames: number = 0; // good-form frames during the last rep cycle
-  private totalRepCycleFrames: number = 0; // total frames during the last rep cycle
+  private lastRepGoodFormFrames: number = 0;
+  private totalRepCycleFrames: number = 0;
   private lastRepQuality: 'PERFECT' | 'GOOD' | 'PARTIAL' | null = null;
 
   constructor(exercise: ExerciseType, targetReps: number = 20) {
@@ -200,19 +203,16 @@ export class PoseEvaluator {
     this.lastRepGoodFormFrames = 0;
     this.totalRepCycleFrames = 0;
     this.lastRepQuality = null;
-    if (targetReps !== undefined) {
-      this.targetReps = targetReps;
-    }
+    // FIX 2
+    this.confirmedDown = false;
+    this.confirmedUp = false;
+    if (targetReps !== undefined) this.targetReps = targetReps;
   }
 
-  /**
-   * Process a single frame of 33 MediaPipe pose landmarks.
-   */
   public evaluateFrame(landmarks: Landmark[]): {
     state: ExerciseState;
     repIncremented: boolean;
   } {
-    // ── Insufficient data ──────────────────────────────────
     if (!landmarks || landmarks.length < 33) {
       return {
         state: this.buildState(0, 0, 'Position full body in camera frame', false, [], 'left', 0, 0),
@@ -222,43 +222,40 @@ export class PoseEvaluator {
 
     this.frameCount++;
 
-    // ── Extract joints ─────────────────────────────────────
     const lShoulder = landmarks[POSE_LANDMARKS.LEFT_SHOULDER];
     const rShoulder = landmarks[POSE_LANDMARKS.RIGHT_SHOULDER];
-    const lElbow = landmarks[POSE_LANDMARKS.LEFT_ELBOW];
-    const rElbow = landmarks[POSE_LANDMARKS.RIGHT_ELBOW];
-    const lWrist = landmarks[POSE_LANDMARKS.LEFT_WRIST];
-    const rWrist = landmarks[POSE_LANDMARKS.RIGHT_WRIST];
-    const lHip = landmarks[POSE_LANDMARKS.LEFT_HIP];
-    const rHip = landmarks[POSE_LANDMARKS.RIGHT_HIP];
-    const lKnee = landmarks[POSE_LANDMARKS.LEFT_KNEE];
-    const rKnee = landmarks[POSE_LANDMARKS.RIGHT_KNEE];
-    const lAnkle = landmarks[POSE_LANDMARKS.LEFT_ANKLE];
-    const rAnkle = landmarks[POSE_LANDMARKS.RIGHT_ANKLE];
+    const lElbow    = landmarks[POSE_LANDMARKS.LEFT_ELBOW];
+    const rElbow    = landmarks[POSE_LANDMARKS.RIGHT_ELBOW];
+    const lWrist    = landmarks[POSE_LANDMARKS.LEFT_WRIST];
+    const rWrist    = landmarks[POSE_LANDMARKS.RIGHT_WRIST];
+    const lHip      = landmarks[POSE_LANDMARKS.LEFT_HIP];
+    const rHip      = landmarks[POSE_LANDMARKS.RIGHT_HIP];
+    const lKnee     = landmarks[POSE_LANDMARKS.LEFT_KNEE];
+    const rKnee     = landmarks[POSE_LANDMARKS.RIGHT_KNEE];
+    const lAnkle    = landmarks[POSE_LANDMARKS.LEFT_ANKLE];
+    const rAnkle    = landmarks[POSE_LANDMARKS.RIGHT_ANKLE];
 
-    // ── Visibility scoring ─────────────────────────────────
-    const leftArmVis = avgVisibility(lShoulder, lElbow, lWrist);
+    const leftArmVis  = avgVisibility(lShoulder, lElbow, lWrist);
     const rightArmVis = avgVisibility(rShoulder, rElbow, rWrist);
     const leftBodyVis = avgVisibility(lShoulder, lHip, lKnee, lAnkle);
     const rightBodyVis = avgVisibility(rShoulder, rHip, rKnee, rAnkle);
 
-    const leftScore = (leftArmVis + leftBodyVis) / 2;
+    const leftScore  = (leftArmVis + leftBodyVis) / 2;
     const rightScore = (rightArmVis + rightBodyVis) / 2;
     const activeSide: 'left' | 'right' = leftScore >= rightScore ? 'left' : 'right';
 
-    // ── Visibility gate — reject frame if key joints are not visible ──
     const keyJointVis = this.exercise === 'pushups'
       ? [
           activeSide === 'left' ? lShoulder : rShoulder,
-          activeSide === 'left' ? lElbow : rElbow,
-          activeSide === 'left' ? lWrist : rWrist,
-          activeSide === 'left' ? lHip : rHip,
+          activeSide === 'left' ? lElbow    : rElbow,
+          activeSide === 'left' ? lWrist    : rWrist,
+          activeSide === 'left' ? lHip      : rHip,
         ]
       : [
           activeSide === 'left' ? lShoulder : rShoulder,
-          activeSide === 'left' ? lHip : rHip,
-          activeSide === 'left' ? lKnee : rKnee,
-          activeSide === 'left' ? lAnkle : rAnkle,
+          activeSide === 'left' ? lHip      : rHip,
+          activeSide === 'left' ? lKnee     : rKnee,
+          activeSide === 'left' ? lAnkle    : rAnkle,
         ];
 
     const visibleJointCount = keyJointVis.filter(
@@ -268,43 +265,32 @@ export class PoseEvaluator {
     if (visibleJointCount < 3) {
       return {
         state: this.buildState(
-          this.smoothedAngle,
-          0,
+          this.smoothedAngle, 0,
           'Move closer or adjust angle — key joints not visible',
-          false,
-          ['Low visibility'],
-          activeSide,
-          leftScore,
-          rightScore,
+          false, ['Low visibility'], activeSide, leftScore, rightScore,
         ),
         repIncremented: false,
       };
     }
 
-    // ── Compute angles ─────────────────────────────────────
-    let rawAngle: number;
     const formIssues: string[] = [];
-    let isGoodForm = true;
+
+    let rawAngle: number;
 
     if (this.exercise === 'pushups') {
       rawAngle = this.computePushupAngle(
         lShoulder, rShoulder, lElbow, rElbow, lWrist, rWrist,
         leftArmVis, rightArmVis,
       );
-
-      // ── Form checks ──────────────────────────────────────
       this.validatePushupForm(
         lShoulder, rShoulder, lHip, rHip, lAnkle, rAnkle,
-        lWrist, rWrist, lElbow, rElbow,
-        activeSide, leftBodyVis, rightBodyVis, formIssues,
+        leftBodyVis, rightBodyVis, formIssues,
       );
     } else {
       rawAngle = this.computeSitupAngle(
         lShoulder, rShoulder, lHip, rHip, lKnee, rKnee,
         leftBodyVis, rightBodyVis,
       );
-
-      // ── Form checks ──────────────────────────────────────
       this.validateSitupForm(
         lHip, rHip, lKnee, rKnee, lAnkle, rAnkle,
         lShoulder, rShoulder,
@@ -312,17 +298,13 @@ export class PoseEvaluator {
       );
     }
 
-    if (formIssues.length > 0) {
-      isGoodForm = false;
-    }
+    const isGoodForm = formIssues.length === 0;
 
-    // ── Angular velocity check ─────────────────────────────
     const angularDelta = Math.abs(rawAngle - this.previousRawAngle);
     const velocityExceeded =
       this.hasSmoothedValue && angularDelta > MAX_ANGULAR_VELOCITY;
     this.previousRawAngle = rawAngle;
 
-    // ── EMA smoothing ──────────────────────────────────────
     if (!this.hasSmoothedValue) {
       this.smoothedAngle = rawAngle;
       this.hasSmoothedValue = true;
@@ -334,21 +316,19 @@ export class PoseEvaluator {
 
     const angle = this.smoothedAngle;
 
-    // ── Calibration phase ──────────────────────────────────
     if (this.frameCount <= CALIBRATION_FRAMES) {
       this.stage = 'CALIBRATING';
       const remaining = CALIBRATION_FRAMES - this.frameCount;
       return {
         state: this.buildState(
           angle, rawAngle,
-          `Calibrating sensors... hold position (${remaining})`,
+          `Calibrating... hold position (${remaining})`,
           true, [], activeSide, leftScore, rightScore,
         ),
         repIncremented: false,
       };
     }
 
-    // ── Track form quality across rep cycle ─────────────────
     this.totalRepCycleFrames++;
     if (isGoodForm) {
       this.consecutiveGoodForm++;
@@ -357,7 +337,6 @@ export class PoseEvaluator {
       this.consecutiveGoodForm = 0;
     }
 
-    // ── State machine (with hysteresis + hold confirmation) ─
     let repIncremented = false;
     let formFeedback = '';
     const now = Date.now();
@@ -372,7 +351,6 @@ export class PoseEvaluator {
       ));
     }
 
-    // Override feedback with form issue if present
     if (formIssues.length > 0 && !repIncremented) {
       formFeedback = formIssues[0];
     }
@@ -386,64 +364,50 @@ export class PoseEvaluator {
     };
   }
 
-  // ── Push-up: bilateral elbow angle ───────────────────────
+  // FIX 4: Use calculateAngle3D for elbow angle (accurate for any camera angle)
   private computePushupAngle(
     lShoulder: Landmark, rShoulder: Landmark,
     lElbow: Landmark, rElbow: Landmark,
     lWrist: Landmark, rWrist: Landmark,
     leftVis: number, rightVis: number,
   ): number {
-    const leftAngle = calculateAngle(lShoulder, lElbow, lWrist);
-    const rightAngle = calculateAngle(rShoulder, rElbow, rWrist);
+    const leftAngle  = calculateAngle3D(lShoulder, lElbow, lWrist);
+    const rightAngle = calculateAngle3D(rShoulder, rElbow, rWrist);
     return bilateralAngle(leftAngle, rightAngle, leftVis, rightVis);
   }
 
-  // ── Sit-up: bilateral hip angle ──────────────────────────
   private computeSitupAngle(
     lShoulder: Landmark, rShoulder: Landmark,
     lHip: Landmark, rHip: Landmark,
     lKnee: Landmark, rKnee: Landmark,
     leftVis: number, rightVis: number,
   ): number {
-    const leftAngle = calculateAngle(lShoulder, lHip, lKnee);
+    const leftAngle  = calculateAngle(lShoulder, lHip, lKnee);
     const rightAngle = calculateAngle(rShoulder, rHip, rKnee);
     return bilateralAngle(leftAngle, rightAngle, leftVis, rightVis);
   }
 
-  // ── Push-up form validation ──────────────────────────────
+  // FIX 7: Removed the elbow flare check (shoulder.x vs wrist.x).
+  // It was only meaningful for front-view cameras — for any side-view camera it
+  // always fired as "Hands too wide" even with perfect form.
   private validatePushupForm(
     lShoulder: Landmark, rShoulder: Landmark,
     lHip: Landmark, rHip: Landmark,
     lAnkle: Landmark, rAnkle: Landmark,
-    lWrist: Landmark, rWrist: Landmark,
-    _lElbow: Landmark, _rElbow: Landmark,
-    activeSide: 'left' | 'right',
     leftBodyVis: number, rightBodyVis: number,
     issues: string[],
   ): void {
-    // 1. Plank alignment: Shoulder → Hip → Ankle ≥ 155°
-    const leftPlank = calculateAngle(lShoulder, lHip, lAnkle);
+    // Plank alignment: Shoulder → Hip → Ankle
+    // FIX 6: threshold lowered from 155 to 145
+    const leftPlank  = calculateAngle(lShoulder, lHip, lAnkle);
     const rightPlank = calculateAngle(rShoulder, rHip, rAnkle);
     const plankAngle = bilateralAngle(leftPlank, rightPlank, leftBodyVis, rightBodyVis);
 
     if (plankAngle < PUSHUP_PLANK_MIN) {
-      if (plankAngle < 130) {
-        issues.push('Hips sagging — tighten core!');
-      } else {
-        issues.push('Keep hips level with shoulders');
-      }
-    }
-
-    // 2. Elbow flare check: wrist should be roughly under shoulder (x-axis)
-    const shoulder = activeSide === 'left' ? lShoulder : rShoulder;
-    const wrist = activeSide === 'left' ? lWrist : rWrist;
-    const horizontalDrift = Math.abs(shoulder.x - wrist.x);
-    if (horizontalDrift > 0.15) {
-      issues.push('Hands too wide — tuck elbows closer');
+      issues.push(plankAngle < 120 ? 'Hips sagging — tighten core!' : 'Keep hips level with shoulders');
     }
   }
 
-  // ── Sit-up form validation ───────────────────────────────
   private validateSitupForm(
     lHip: Landmark, rHip: Landmark,
     lKnee: Landmark, rKnee: Landmark,
@@ -453,8 +417,7 @@ export class PoseEvaluator {
     leftBodyVis: number, rightBodyVis: number,
     issues: string[],
   ): void {
-    // 1. Knee angle stability: Hip → Knee → Ankle should be 50°–110° (knees bent)
-    const leftKneeAngle = calculateAngle(lHip, lKnee, lAnkle);
+    const leftKneeAngle  = calculateAngle(lHip, lKnee, lAnkle);
     const rightKneeAngle = calculateAngle(rHip, rKnee, rAnkle);
     const kneeAngle = bilateralAngle(leftKneeAngle, rightKneeAngle, leftBodyVis, rightBodyVis);
 
@@ -464,15 +427,25 @@ export class PoseEvaluator {
       issues.push('Bend knees more — feet flat on floor');
     }
 
-    // 2. Torso must actually rise: shoulder-y should be meaningfully above hip-y during UP
     const shoulder = activeSide === 'left' ? lShoulder : rShoulder;
-    const hip = activeSide === 'left' ? lHip : rHip;
+    const hip      = activeSide === 'left' ? lHip      : rHip;
     if (this.stage === 'UP' && shoulder.y >= hip.y - 0.02) {
       issues.push('Raise torso higher toward knees');
     }
   }
 
-  // ── Push-up state machine ────────────────────────────────
+  /**
+   * FIX 1 + 2 + 3: Push-up state machine with true hysteresis.
+   *
+   * Original problem: single threshold per zone meant that if the smoothed angle
+   * bounced around 85° (e.g. 83→87→82→88), the state alternated DOWN↔TRANSITION
+   * on every frame, holdFrameCount reset to 0 each time TRANSITION was entered,
+   * wasAtExtreme was never set, and reps were never counted.
+   *
+   * Fix: confirmedDown / confirmedUp only change state when the angle clearly
+   * crosses the OPPOSITE threshold (enter at 90, exit only once past 105).
+   * This creates a dead-band that absorbs EMA jitter around the boundary.
+   */
   private evaluatePushupState(
     angle: number,
     now: number,
@@ -482,10 +455,27 @@ export class PoseEvaluator {
     let repIncremented = false;
     let formFeedback = '';
 
-    if (angle < PUSHUP_DOWN_ENTER) {
-      // ── At the bottom position ──
+    // ── Update hysteresis flags ────────────────────────────
+    if (!this.confirmedDown && angle <= PUSHUP_DOWN_ENTER) {
+      this.confirmedDown = true;
+    } else if (this.confirmedDown && angle >= PUSHUP_DOWN_EXIT) {
+      this.confirmedDown = false;
+    }
+
+    if (!this.confirmedUp && angle >= PUSHUP_UP_ENTER) {
+      this.confirmedUp = true;
+    } else if (this.confirmedUp && angle <= PUSHUP_UP_EXIT) {
+      this.confirmedUp = false;
+    }
+
+    // ── State machine ──────────────────────────────────────
+    if (this.confirmedDown) {
+      // ── DOWN zone ──
       this.holdFrameCount++;
       this.stage = 'DOWN';
+      // confirmedUp cannot be true simultaneously (angles can't be both
+      // above 145 and below 90 at the same time), but clear it defensively
+      this.confirmedUp = false;
 
       if (this.holdFrameCount >= HOLD_FRAMES_REQUIRED) {
         this.wasAtExtreme = true;
@@ -493,8 +483,9 @@ export class PoseEvaluator {
       } else {
         formFeedback = 'Hold at bottom...';
       }
-    } else if (angle > PUSHUP_UP_ENTER) {
-      // ── At the top position ──
+
+    } else if (this.confirmedUp) {
+      // ── UP zone ──
       this.stage = 'UP';
 
       if (
@@ -502,43 +493,50 @@ export class PoseEvaluator {
         !velocityExceeded &&
         now - this.lastRepTimestamp > MIN_REP_INTERVAL_MS
       ) {
-        // ── Valid rep! ──
+        // ── Valid rep ──
         this.reps++;
         repIncremented = true;
         this.lastRepTimestamp = now;
         this.wasAtExtreme = false;
         this.holdFrameCount = 0;
 
-        // Assess rep quality
         this.lastRepQuality = this.assessRepQuality(formIssues);
         this.lastRepGoodFormFrames = 0;
         this.totalRepCycleFrames = 0;
 
         formFeedback =
-          this.lastRepQuality === 'PERFECT' ? 'Perfect rep!' :
-          this.lastRepQuality === 'GOOD' ? 'Good rep!' :
+          this.lastRepQuality === 'PERFECT' ? 'Perfect rep!'  :
+          this.lastRepQuality === 'GOOD'    ? 'Good rep!'     :
           'Rep counted — improve form';
+
       } else if (this.wasAtExtreme && velocityExceeded) {
         formFeedback = 'Too fast — controlled movement only';
+      } else if (this.wasAtExtreme) {
+        // Waiting to confirm not-too-fast on next frame
+        formFeedback = 'Hold at top...';
       } else {
-        formFeedback = 'Lower chest to 90° elbow bend';
+        formFeedback = 'Lower chest toward the floor';
       }
+
     } else {
       // ── Transition zone ──
       this.stage = 'TRANSITION';
+      // Only reset holdFrameCount here — NOT wasAtExtreme.
+      // wasAtExtreme must survive through TRANSITION so the rep can be counted
+      // when the UP zone is entered.
       this.holdFrameCount = 0;
 
       if (!this.wasAtExtreme) {
         formFeedback = 'Lower chest further down';
       } else {
-        formFeedback = 'Push arms fully straight';
+        formFeedback = 'Push arms to full extension';
       }
     }
 
     return { repIncremented, formFeedback };
   }
 
-  // ── Sit-up state machine ─────────────────────────────────
+  // Sit-up state machine — unchanged from original (not reported broken)
   private evaluateSitupState(
     angle: number,
     now: number,
@@ -549,7 +547,6 @@ export class PoseEvaluator {
     let formFeedback = '';
 
     if (angle < SITUP_UP_ENTER) {
-      // ── At peak flexion (torso raised) ──
       this.holdFrameCount++;
       this.stage = 'UP';
 
@@ -560,7 +557,6 @@ export class PoseEvaluator {
         formFeedback = 'Hold at the top...';
       }
     } else if (angle > SITUP_DOWN_ENTER) {
-      // ── Lying down / start position ──
       this.stage = 'DOWN';
 
       if (
@@ -568,7 +564,6 @@ export class PoseEvaluator {
         !velocityExceeded &&
         now - this.lastRepTimestamp > MIN_REP_INTERVAL_MS
       ) {
-        // ── Valid rep! ──
         this.reps++;
         repIncremented = true;
         this.lastRepTimestamp = now;
@@ -580,8 +575,8 @@ export class PoseEvaluator {
         this.totalRepCycleFrames = 0;
 
         formFeedback =
-          this.lastRepQuality === 'PERFECT' ? 'Perfect rep!' :
-          this.lastRepQuality === 'GOOD' ? 'Good rep!' :
+          this.lastRepQuality === 'PERFECT' ? 'Perfect rep!'  :
+          this.lastRepQuality === 'GOOD'    ? 'Good rep!'     :
           'Rep counted — improve form';
       } else if (this.wasAtExtreme && velocityExceeded) {
         formFeedback = 'Too fast — use controlled motion';
@@ -589,7 +584,6 @@ export class PoseEvaluator {
         formFeedback = 'Crunch up toward your knees';
       }
     } else {
-      // ── Transition zone ──
       this.stage = 'TRANSITION';
       this.holdFrameCount = 0;
       formFeedback = this.wasAtExtreme ? 'Lower back to start' : 'Raise torso higher';
@@ -598,20 +592,14 @@ export class PoseEvaluator {
     return { repIncremented, formFeedback };
   }
 
-  // ── Rep quality assessment ───────────────────────────────
-  private assessRepQuality(
-    currentIssues: string[],
-  ): 'PERFECT' | 'GOOD' | 'PARTIAL' {
+  private assessRepQuality(currentIssues: string[]): 'PERFECT' | 'GOOD' | 'PARTIAL' {
     if (this.totalRepCycleFrames === 0) return 'GOOD';
-
     const goodRatio = this.lastRepGoodFormFrames / this.totalRepCycleFrames;
-
     if (currentIssues.length === 0 && goodRatio >= 0.85) return 'PERFECT';
     if (goodRatio >= 0.6) return 'GOOD';
     return 'PARTIAL';
   }
 
-  // ── Build state object ───────────────────────────────────
   private buildState(
     angle: number,
     rawAngle: number,

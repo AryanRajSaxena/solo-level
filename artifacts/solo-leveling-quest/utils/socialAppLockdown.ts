@@ -228,3 +228,4 @@ export async function attemptLaunchRestrictedApp(
     return false;
   }
 }
+
